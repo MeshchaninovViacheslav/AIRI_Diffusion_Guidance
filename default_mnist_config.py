@@ -29,6 +29,8 @@ def create_default_mnist_config():
     optim.grad_clip_norm = 1.0
     optim.linear_warmup = 4000
     optim.lr = 2e-4
+    optim.min_lr = 2e-4
+    optim.warmup_lr = 0
     optim.weight_decay = 0
     optim.betas = (0.9, 0.999)
     optim.eps = 1e-8

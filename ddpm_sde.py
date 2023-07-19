@@ -73,30 +73,15 @@ class DDPM_SDE:
             def T(self):
                 return T
 
-            def sde(self, x, t, y=None):
-                """
-                Create the drift and diffusion functions for the reverse SDE/ODE.
-                
-                
-                y is here for class-conditional generation through score SDE/ODE
-                """
-
-                """
-                Calculate drift and diffusion for reverse SDE/ODE
-                
-                
-                ode_sampling - True -> reverse SDE
-                ode_sampling - False -> reverse ODE
-                """
-
+            def sde(self, x, t):
                 if ode_sampling:
-                    drift_sde, diffuson_sde = sde_fn(x, t)
-                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t, y)
-                    diffusion = diffuson_sde
-                else:
                     drift_sde, _ = sde_fn(x, t)
-                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t, y)
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)
                     diffusion = 0
+                else:
+                    drift_sde, diffuson_sde = sde_fn(x, t)
+                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t)
+                    diffusion = diffuson_sde
                 return drift, diffusion
 
         return RSDE()
@@ -109,7 +94,7 @@ class EulerDiffEqSolver:
         self.ode_sampling = ode_sampling
         self.rsde = sde.reverse(score_fn, ode_sampling)
 
-    def step(self, x, t, y=None):
+    def step(self, x_t, t):
         """
         Implement reverse SDE/ODE Euler solver
         """
@@ -118,9 +103,9 @@ class EulerDiffEqSolver:
         x_mean = deterministic part
         x = x_mean + noise (yet another noise sampling)
         """
-        dt = torch.tensor(-1 / self.sde.N)
-        drift, diffusion = self.rsde.sde(x, t, y)
-        x_mean = x + drift * dt
-        noize = diffusion * torch.sqrt(-dt) * torch.randn_like(x_mean)
-        x = x_mean + noize
+        dt = -1 / self.rsde.N
+        noize = torch.randn_like(x_t)
+        drift, diffusion = self.rsde.sde(x_t, t)
+        x_mean = x_t + drift * dt
+        x = x_mean + diffusion * np.sqrt(-dt) * noize
         return x, x_mean
