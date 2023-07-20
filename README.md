@@ -14,7 +14,17 @@
 > 2. Как выглядит переход от x_t к x_{t-1} на этапе генерации
 > 3. Как необходимо модифицировать итерацию генерации, чтобы получить classifier guidance
 > 4. Как необходимо модифицировать итерацию генерации и модель, чтобы получить classifier-free guidance
-
+- [ ] Разобраться в коде. Надо однозначно понимать, что происходит в файле 
+[ddpm_sde.py](https://github.com/MeshchaninovViacheslav/AIRI_Diffusion_Guidance/blob/main/ddpm_sde.py), 
+так как в нем описаны прямой и обратный процесс диффузии, 
+и в файле [diffusion.py](https://github.com/MeshchaninovViacheslav/AIRI_Diffusion_Guidance/blob/main/diffusion.py), 
+это основной класс для обучения модели.
+- [ ] Дописать код обучения модели в функциях 
+[calc_score](https://github.com/MeshchaninovViacheslav/AIRI_Diffusion_Guidance/blob/8cf7266866a5738fcb6bf2a9e40e6c33d61412a5/diffusion.py#L128),
+[calc_loss](https://github.com/MeshchaninovViacheslav/AIRI_Diffusion_Guidance/blob/8cf7266866a5738fcb6bf2a9e40e6c33d61412a5/diffusion.py#L131C9-L131C18)
+[sample_images](https://github.com/MeshchaninovViacheslav/AIRI_Diffusion_Guidance/blob/8cf7266866a5738fcb6bf2a9e40e6c33d61412a5/diffusion.py#L244).
+Это задание преимущественно для Вити и Ильи. Так как это база, с которой дальше мы будем работать.
+- 
 
 ## Материалы по проекту
 1. Lil'Log https://lilianweng.github.io/posts/2021-07-11-diffusion-models/#conditioned-generation
