@@ -125,7 +125,8 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        # TODO
+        out = self.model(input_x, input_t) # мы в DDPM предсказываем шум который надо отнять
+        score = -out / np.std(input_x) # вот этот момент не оч понимаю, но по инструкции надо сделать так. Предположу что численная стабильность)))
         return score
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
@@ -143,7 +144,13 @@ class DiffusionRunner:
             5) true score = -z / std
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
-        # TODO
+        t = np.random.choice(np.arange(1, self.sde.N))
+        drift, diffusion_coef = self.sde.sde(clean_x, t)
+        x_t = drift * t + torch.rand_like(clean_x) * diffusion_coef
+        predicted_score = self.calc_score(x_t, t)
+        true_score = - torch.rand_like(clean_x) # откуда нам стд брать, от сгенерированного шума? зачем?
+        loss = torch.mean(torch.pow(true_score + predicted_score), 2)
+
         return loss
 
     def set_data_generator(self) -> None:
@@ -240,8 +247,9 @@ class DiffusionRunner:
             """
             Implement cycle for Euler RSDE sampling w.r.t labels 
             Implement cycle for Euler RSDE sampling w.r.t labels 
+
             """
-            #TODO
+            
 
         return self.inverse_scaler(pred_images)
 
