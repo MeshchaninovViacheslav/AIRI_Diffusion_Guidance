@@ -125,7 +125,11 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        # TODO
+        eps = self.model(input_x, input_t)
+        sigma = input_x.std()
+        
+        score = -eps / sigma
+        
         return score
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
@@ -144,6 +148,17 @@ class DiffusionRunner:
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
         # TODO
+        
+        t = self.sample_time(clean_x.shape[0], eps)
+        mean, std = self.sde.marginal_prob(clean_x, t)
+        noise = torch.randn(clean_x.shape)
+        x_t = mean + std*noise
+        
+        pred_score = self.calc_score(x_t, t)
+        score = -noise / self.sde.marginal_std(input_t)
+        
+        loss = torch.mean(torch.pow((score - pred_score), 2))
+        
         return loss
 
     def set_data_generator(self) -> None:
@@ -239,10 +254,14 @@ class DiffusionRunner:
         with torch.no_grad():
             """
             Implement cycle for Euler RSDE sampling w.r.t labels 
-            Implement cycle for Euler RSDE sampling w.r.t labels 
             """
-            #TODO
-
+            x_t = torch.randn(shape)
+            timestemp = torch.linspace(self.sde.T, 0, self.sde.N, device=self.device)
+            for time in timestemp:
+                t = time.to(self.device)
+                x_t, _ = self.diff_eq_solver.step(x_t, t)
+        
+        pred_images = x_t    
         return self.inverse_scaler(pred_images)
 
     def snapshot(self, labels: Optional[torch.Tensor] = None) -> None:
