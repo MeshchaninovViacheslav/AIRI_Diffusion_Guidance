@@ -125,7 +125,9 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        # TODO
+        pred_noize = self.model(input_x, input_t)
+        std = self.sde.marginal_std(input_t)
+        score = -pred_noize / std
         return score
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
@@ -138,12 +140,17 @@ class DiffusionRunner:
         algorithm:
             1) sample time - t
             2) find conditional distribution q(x_t | x_0), x_0 = clean_x
-            3) sample x_t ~ q(x_t | x_0), x_t = noizy_x
+            3) sample x_t ~ q(x_t | x_0), x_t = noisy_x
             4) calculate predicted score via self.calc_score
             5) true score = -z / std
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
-        # TODO
+        t = self.sample_time(clean_x.shape[0], eps)
+        mean, std = self.sde.marginal_prob(clean_x, t)
+        noise = torch.randn_like(clean_x)
+        pred_score = self.calc_score(mean + noise * std, t)
+        score = -noise / self.sde.marginal_std(t)
+        loss = torch.pow(score - pred_score, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
@@ -238,12 +245,15 @@ class DiffusionRunner:
         device = torch.device(self.config.device)
         with torch.no_grad():
             """
-            Implement cycle for Euler RSDE sampling w.r.t labels 
-            Implement cycle for Euler RSDE sampling w.r.t labels 
+            Implement cycle for Euler RSDE sampling w.r.t labels  
             """
-            #TODO
+            noisy_x = torch.rand(shape, device=device)
+            times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
+            for time in times:
+                t = torch.cuda.FloatTensor(batch_size) * time
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
 
-        return self.inverse_scaler(pred_images)
+        return self.inverse_scaler(noisy_x)
 
     def snapshot(self, labels: Optional[torch.Tensor] = None) -> None:
         prev_mode = self.model.training
