@@ -155,7 +155,7 @@ class DiffusionRunner:
         x_t = mean + std*noise
         
         pred_score = self.calc_score(x_t, t)
-        score = -noise / self.sde.marginal_std(input_t)
+        score = -noise / self.sde.marginal_std(t)
         
         loss = torch.mean(torch.pow((score - pred_score), 2))
         
@@ -256,7 +256,7 @@ class DiffusionRunner:
             Implement cycle for Euler RSDE sampling w.r.t labels 
             """
             x_t = torch.randn(shape)
-            timestemp = torch.linspace(self.sde.T, 0, self.sde.N, device=self.device)
+            timestemp = torch.linspace(self.sde.T, eps, self.sde.N, device=self.device)
             for time in timestemp:
                 t = time.to(self.device)
                 x_t, _ = self.diff_eq_solver.step(x_t, t)
