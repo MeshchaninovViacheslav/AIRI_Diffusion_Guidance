@@ -126,7 +126,8 @@ class DiffusionRunner:
             3) calculate score = -pred_noize / std
         """
         out = self.model(input_x, input_t) # мы в DDPM предсказываем шум который надо отнять
-        score = -out / np.std(input_x) # вот этот момент не оч понимаю, но по инструкции надо сделать так. Предположу что численная стабильность)))
+        std = self.sde.marginal_std(input_t)
+        score = -out / std
         return score
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
@@ -144,11 +145,13 @@ class DiffusionRunner:
             5) true score = -z / std
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
-        t = np.random.choice(np.arange(1, self.sde.N))
-        drift, diffusion_coef = self.sde.sde(clean_x, t)
-        x_t = drift * t + torch.rand_like(clean_x) * diffusion_coef
+        t = np.random.uniform(low = eps, high = self.sde.N)
+        mean, std = self.sde.marginal_prob(clean_x, t)
+        normal_noize = self.sde.prior_sampling(clean_x.size())
+        x_t = normal_noize * std + mean
+
         predicted_score = self.calc_score(x_t, t)
-        true_score = - torch.rand_like(clean_x) # откуда нам стд брать, от сгенерированного шума? зачем?
+        true_score = - normal_noize / std
         loss = torch.mean(torch.pow(true_score + predicted_score), 2)
 
         return loss

@@ -74,7 +74,7 @@ class DDPM_SDE:
                 return T
 
             def sde(self, x, t):
-                if ode_sampling:
+                if self.ode_sampling:
                     drift_sde, _ = sde_fn(x, t)
                     drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)
                     diffusion = 0
