@@ -125,11 +125,14 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        pred_noize = self.model(input_x, input_t)
+        eps = self.model(input_x, input_t)
         std = self.sde.marginal_std(input_t)
         std = std.view(-1, 1, 1, 1)
-        score = -pred_noize / std
-        return score
+        score = -eps / std
+        return {
+            'score': score,
+            'noise': eps
+        }
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
         """
@@ -150,9 +153,9 @@ class DiffusionRunner:
         mean, std = self.sde.marginal_prob(clean_x, t)
         noise = torch.randn_like(clean_x)
         std = std.view(-1, 1, 1, 1)
-        pred_score = self.calc_score(mean + noise * std, t)
+        pred = self.calc_score(mean + noise * std, t)
         score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
-        loss = torch.pow(score - pred_score, 2).mean()
+        loss = torch.pow(pred['noise'] - noise, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
@@ -251,7 +254,7 @@ class DiffusionRunner:
             """
             Implement cycle for Euler RSDE sampling w.r.t labels  
             """
-            noisy_x = torch.rand(shape, device=device)
+            noisy_x = torch.randn(shape, device=device)
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
             for time in times:
                 t = torch.cuda.FloatTensor(batch_size) * time
