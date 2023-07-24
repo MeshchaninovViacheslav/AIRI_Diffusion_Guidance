@@ -47,6 +47,8 @@ def create_default_mnist_config():
 
     training.checkpoints_folder = './ddpm_checkpoints/'
 
+    training.checkpoints_prefix = "score_model"
+
     # sde
     sde = config.sde = ml_collections.ConfigDict()
     sde.N = 1000

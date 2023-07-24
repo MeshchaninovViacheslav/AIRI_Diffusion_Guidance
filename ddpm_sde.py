@@ -106,6 +106,7 @@ class EulerDiffEqSolver:
         dt = -1 / self.rsde.N
         noize = torch.randn_like(x_t)
         drift, diffusion = self.rsde.sde(x_t, t)
+        diffusion = diffusion.view(-1, 1, 1, 1)
         x_mean = x_t + drift * dt
         x = x_mean + diffusion * np.sqrt(-dt) * noize
         return x, x_mean

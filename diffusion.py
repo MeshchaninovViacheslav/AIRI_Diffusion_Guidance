@@ -126,6 +126,11 @@ class DiffusionRunner:
             3) calculate score = -pred_noize / std
         """
         # TODO
+        eps = self.model(input_x, input_t)
+        # std = input_x.std()
+        std = self.sde.marginal_std(input_t)
+        std = std.view(-1, 1, 1, 1)
+        score = -eps / std
         return score
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
@@ -144,6 +149,20 @@ class DiffusionRunner:
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
         # TODO
+
+
+        t = self.sample_time(clean_x.shape[0], eps) #1
+        mean, std = self.sde.marginal_prob(clean_x, t) #2
+        std = std.view(-1, 1, 1, 1)
+        device = torch.device(self.config.device)
+        noise = self.sde.prior_sampling(clean_x.shape).to(device) #3
+        # print(mean.device, noise.device)
+        x_t = mean + std * noise #3
+        pred_score = self.calc_score(x_t, t) #4 
+        score = - noise / std # 5
+
+        loss = torch.mean(torch.pow(score + pred_score, 2)) #6
+
         return loss
 
     def set_data_generator(self) -> None:
@@ -209,7 +228,7 @@ class DiffusionRunner:
 
     def save_checkpoint(self) -> None:
         os.makedirs(self.checkpoints_folder, exist_ok=True)
-        prefix = f"{self.config.checkpoints_prefix}-{self.step}"
+        prefix = f"{self.config.training.checkpoints_prefix}_{self.step}"
         file_path = os.path.join(self.checkpoints_folder, prefix + ".pth")
         torch.save(
             {
@@ -242,8 +261,13 @@ class DiffusionRunner:
             Implement cycle for Euler RSDE sampling w.r.t labels 
             """
             #TODO
+            x_t = torch.randn(shape, device=device)
+            times = torch.linspace(self.sde.T - eps, eps, self.sde.N, device=device)
+            for time in times:
+                t = torch.ones(batch_size, device=device) * time
+                x_t, _ = self.diff_eq_solver.step(x_t, t)
 
-        return self.inverse_scaler(pred_images)
+        return self.inverse_scaler(x_t)
 
     def snapshot(self, labels: Optional[torch.Tensor] = None) -> None:
         prev_mode = self.model.training
