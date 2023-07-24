@@ -125,11 +125,10 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        eps = self.model(input_x, input_t)
-        sigma = input_x.std()
-        
-        score = -eps / sigma
-        
+        pred_noize = self.model(input_x, input_t)
+        std = self.sde.marginal_std(input_t)
+        std = std.view(-1, 1, 1, 1)
+        score = -pred_noize / std
         return score
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
@@ -142,23 +141,18 @@ class DiffusionRunner:
         algorithm:
             1) sample time - t
             2) find conditional distribution q(x_t | x_0), x_0 = clean_x
-            3) sample x_t ~ q(x_t | x_0), x_t = noizy_x
+            3) sample x_t ~ q(x_t | x_0), x_t = noisy_x
             4) calculate predicted score via self.calc_score
             5) true score = -z / std
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
-        # TODO
-        
         t = self.sample_time(clean_x.shape[0], eps)
         mean, std = self.sde.marginal_prob(clean_x, t)
-        noise = torch.randn(clean_x.shape)
-        x_t = mean + std*noise
-        
-        pred_score = self.calc_score(x_t, t)
-        score = -noise / self.sde.marginal_std(t)
-        
-        loss = torch.mean(torch.pow((score - pred_score), 2))
-        
+        noise = torch.randn_like(clean_x)
+        std = std.view(-1, 1, 1, 1)
+        pred_score = self.calc_score(mean + noise * std, t)
+        score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
+        loss = torch.pow(score - pred_score, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
@@ -182,10 +176,12 @@ class DiffusionRunner:
 
             (X, y) = next(train_generator)
             X = X.to(self.device)
-            with torch.autocast(device_type='cuda', dtype=torch.float32):
+            with torch.cuda.amp.autocast():
                 loss = self.calc_loss(clean_x=X)
-
-            self.log_metric('loss', 'train', loss.item())
+            
+            if iter_idx % self.config.training.logging_freq == 0:
+                self.log_metric('loss', 'train', loss.item())
+            
             self.optimizer_step(loss)
 
             if iter_idx % self.config.training.snapshot_freq == 0:
@@ -253,16 +249,15 @@ class DiffusionRunner:
         device = torch.device(self.config.device)
         with torch.no_grad():
             """
-            Implement cycle for Euler RSDE sampling w.r.t labels 
+            Implement cycle for Euler RSDE sampling w.r.t labels  
             """
-            x_t = torch.randn(shape)
-            timestemp = torch.linspace(self.sde.T, eps, self.sde.N, device=self.device)
-            for time in timestemp:
-                t = time.to(self.device)
-                x_t, _ = self.diff_eq_solver.step(x_t, t)
-        
-        pred_images = x_t    
-        return self.inverse_scaler(pred_images)
+            noisy_x = torch.rand(shape, device=device)
+            times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
+            for time in times:
+                t = torch.cuda.FloatTensor(batch_size) * time
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
+
+        return self.inverse_scaler(noisy_x)
 
     def snapshot(self, labels: Optional[torch.Tensor] = None) -> None:
         prev_mode = self.model.training
