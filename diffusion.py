@@ -131,7 +131,9 @@ class DiffusionRunner:
         std = self.sde.marginal_std(input_t)
         std = std.view(-1, 1, 1, 1)
         score = -eps / std
-        return score
+        # return score
+        return {"score" : score, 
+                "noise" : eps}
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
         """
@@ -149,8 +151,6 @@ class DiffusionRunner:
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
         # TODO
-
-
         t = self.sample_time(clean_x.shape[0], eps) #1
         mean, std = self.sde.marginal_prob(clean_x, t) #2
         std = std.view(-1, 1, 1, 1)
@@ -158,10 +158,16 @@ class DiffusionRunner:
         noise = self.sde.prior_sampling(clean_x.shape).to(device) #3
         # print(mean.device, noise.device)
         x_t = mean + std * noise #3
+        
         pred_score = self.calc_score(x_t, t) #4 
-        score = - noise / std # 5
 
-        loss = torch.mean(torch.pow(score + pred_score, 2)) #6
+        #score-based
+        # score = - noise / std # 5
+        
+        loss = torch.mean(torch.pow(noise + pred_score["noise"], 2)) #6
+
+        #score-based
+        # loss = torch.mean(torch.pow(score + pred_score["score"], 2)) #6
 
         return loss
 
