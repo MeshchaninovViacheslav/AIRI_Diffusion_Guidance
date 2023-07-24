@@ -170,7 +170,7 @@ class DiffusionRunner:
         train_generator = self.datagen.sample_train()
         self.step = 0
 
-        wandb.init(project='sde', name='ddpm_cont')
+        wandb.init(project='sde', name=self.config.training.exp_name)
 
         self.ema = ExponentialMovingAverage(self.model.parameters(), self.config.model.ema_rate)
         self.model.train()
