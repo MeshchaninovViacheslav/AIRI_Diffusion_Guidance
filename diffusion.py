@@ -40,7 +40,7 @@ class DiffusionRunner:
         if eval:
             self.ema = ExponentialMovingAverage(self.model.parameters(), config.model.ema_rate)
             self.restore_parameters()
-            #self.switch_to_ema()
+            self.switch_to_ema()
 
         device = torch.device(self.config.device)
         self.device = device
