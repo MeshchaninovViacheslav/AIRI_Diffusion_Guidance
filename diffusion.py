@@ -40,7 +40,7 @@ class DiffusionRunner:
         if eval:
             self.ema = ExponentialMovingAverage(self.model.parameters(), config.model.ema_rate)
             self.restore_parameters()
-            self.switch_to_ema()
+            #self.switch_to_ema()
 
         device = torch.device(self.config.device)
         self.device = device
@@ -50,7 +50,7 @@ class DiffusionRunner:
         checkpoints_folder: str = self.checkpoints_folder
         if device is None:
             device = torch.device('cpu')
-        model_ckpt = torch.load(checkpoints_folder + '/model.pth', map_location=device)
+        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont-10000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
         ema_ckpt = torch.load(checkpoints_folder + '/ema.pth', map_location=device)
@@ -155,7 +155,7 @@ class DiffusionRunner:
         std = std.view(-1, 1, 1, 1)
         pred = self.calc_score(mean + noise * std, t)
         score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
-        loss = torch.pow(pred['noise'] - noise, 2).mean()
+        loss = torch.pow(pred['noise'] + noise, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
@@ -257,7 +257,7 @@ class DiffusionRunner:
             noisy_x = torch.randn(shape, device=device)
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
             for time in times:
-                t = torch.cuda.FloatTensor(batch_size) * time
+                t = torch.ones(batch_size, device=device) * time
                 noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
 
         return self.inverse_scaler(noisy_x)
