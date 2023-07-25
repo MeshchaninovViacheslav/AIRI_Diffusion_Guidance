@@ -50,10 +50,13 @@ class DiffusionRunner:
         checkpoints_folder: str = self.checkpoints_folder
         if device is None:
             device = torch.device('cpu')
-        model_ckpt = torch.load(checkpoints_folder + '/model.pth', map_location=device)
+        #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_newt-1.pth
+        #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont-50000.pth
+        #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_reversed-50000.pth
+        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
-        ema_ckpt = torch.load(checkpoints_folder + '/ema.pth', map_location=device)
+        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:
@@ -125,8 +128,14 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        # TODO
-        return score
+        eps = self.model(input_x, input_t)
+        std = self.sde.marginal_std(input_t)
+        std = std.view(-1, 1, 1, 1)
+        score = -eps / std
+        return {
+            'score': score,
+            'noise': eps
+        }
 
     def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
         """
@@ -138,12 +147,18 @@ class DiffusionRunner:
         algorithm:
             1) sample time - t
             2) find conditional distribution q(x_t | x_0), x_0 = clean_x
-            3) sample x_t ~ q(x_t | x_0), x_t = noizy_x
+            3) sample x_t ~ q(x_t | x_0), x_t = noisy_x
             4) calculate predicted score via self.calc_score
             5) true score = -z / std
             6) loss = mean(torch.pow(score + pred_score, 2))
         """
-        # TODO
+        t = self.sample_time(clean_x.shape[0], eps)
+        mean, std = self.sde.marginal_prob(clean_x, t)
+        noise = torch.randn_like(clean_x)
+        std = std.view(-1, 1, 1, 1)
+        pred = self.calc_score(mean + noise * std, t)
+        score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
+        loss = torch.pow(pred['noise'] - noise, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
@@ -158,7 +173,7 @@ class DiffusionRunner:
         train_generator = self.datagen.sample_train()
         self.step = 0
 
-        wandb.init(project='sde', name='ddpm_cont')
+        wandb.init(project='sde', name=self.config.training.exp_name)
 
         self.ema = ExponentialMovingAverage(self.model.parameters(), self.config.model.ema_rate)
         self.model.train()
@@ -167,10 +182,12 @@ class DiffusionRunner:
 
             (X, y) = next(train_generator)
             X = X.to(self.device)
-            with torch.autocast(device_type='cuda', dtype=torch.float32):
+            with torch.cuda.amp.autocast():
                 loss = self.calc_loss(clean_x=X)
-
-            self.log_metric('loss', 'train', loss.item())
+            
+            if iter_idx % self.config.training.logging_freq == 0:
+                self.log_metric('loss', 'train', loss.item())
+            
             self.optimizer_step(loss)
 
             if iter_idx % self.config.training.snapshot_freq == 0:
@@ -238,12 +255,15 @@ class DiffusionRunner:
         device = torch.device(self.config.device)
         with torch.no_grad():
             """
-            Implement cycle for Euler RSDE sampling w.r.t labels 
-            Implement cycle for Euler RSDE sampling w.r.t labels 
+            Implement cycle for Euler RSDE sampling w.r.t labels  
             """
-            #TODO
+            noisy_x = torch.randn(shape, device=device)
+            times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
+            for time in times:
+                t = torch.ones(batch_size, device=device) * time
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
 
-        return self.inverse_scaler(pred_images)
+        return self.inverse_scaler(noisy_x)
 
     def snapshot(self, labels: Optional[torch.Tensor] = None) -> None:
         prev_mode = self.model.training
@@ -259,3 +279,15 @@ class DiffusionRunner:
 
         self.switch_back_from_ema()
         self.model.train(prev_mode)
+        
+    def inference(self, labels = None) -> None:
+        self.model.eval()
+        self.switch_to_ema()
+
+        images = self.sample_images(1, labels=labels).cpu()
+        nrow = int(math.sqrt(self.config.training.snapshot_batch_size))
+        grid = torchvision.utils.make_grid(images, nrow=nrow).permute(1, 2, 0)
+        grid = grid.data.numpy().astype(np.uint8)
+        
+        self.switch_back_from_ema()
+        return grid

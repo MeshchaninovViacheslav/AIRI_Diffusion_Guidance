@@ -14,7 +14,8 @@ class DDPM_SDE:
         self.N = config.sde.N
         self.beta_0 = config.sde.beta_min
         self.beta_1 = config.sde.beta_max
-
+        self.predict = config.predict
+        
     @property
     def T(self):
         return 1
@@ -62,7 +63,8 @@ class DDPM_SDE:
         T = self.T
         sde_fn = self.sde
         beta_fn = self._beta
-
+        predict = self.predict
+        
         # Build the class for reverse-time SDE.
         class RSDE:
             def __init__(self):
@@ -76,11 +78,11 @@ class DDPM_SDE:
             def sde(self, x, t):
                 if ode_sampling:
                     drift_sde, _ = sde_fn(x, t)
-                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
                     diffusion = 0
                 else:
                     drift_sde, diffuson_sde = sde_fn(x, t)
-                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t)
+                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
                     diffusion = diffuson_sde
                 return drift, diffusion
 
@@ -104,8 +106,9 @@ class EulerDiffEqSolver:
         x = x_mean + noise (yet another noise sampling)
         """
         dt = -1 / self.rsde.N
-        noize = torch.randn_like(x_t)
+        noise = torch.randn_like(x_t)
         drift, diffusion = self.rsde.sde(x_t, t)
         x_mean = x_t + drift * dt
-        x = x_mean + diffusion * np.sqrt(-dt) * noize
+        #print(x_mean.shape, diffusion.shape, noize.shape)
+        x = x_mean + diffusion.view(-1, 1, 1, 1) * np.sqrt(-dt) * noise
         return x, x_mean

@@ -9,7 +9,7 @@ def create_default_mnist_config():
     data.image_size = 32
     data.num_channels = 1
     data.centered = True
-    data.batch_size = 128
+    data.batch_size = 1024
     data.norm_mean = (0.5)
     data.norm_std = (0.5)
 
@@ -38,14 +38,16 @@ def create_default_mnist_config():
     # training
     training = config.training = ml_collections.ConfigDict()
     training.training_iters = 50_000
-    training.checkpoint_freq = 2_500
-    training.eval_freq = 2_500
-    training.snapshot_freq = 2_500
+    training.checkpoint_freq = 5_000
+    training.eval_freq = 2500
+    training.snapshot_freq = 1000
     training.snapshot_batch_size = 100
     training.batch_size = 256
     training.ode_sampling = False
+    training.logging_freq = 10
+    training.exp_name = 'ddpm_cont'
 
-    training.checkpoints_folder = './ddpm_checkpoints/'
+    training.checkpoints_folder = 'ddpm_checkpoints/'
 
     # sde
     sde = config.sde = ml_collections.ConfigDict()
@@ -60,6 +62,8 @@ def create_default_mnist_config():
     classifier.snapshot_freq = 5_000
     classifier.checkpoint_freq = 5_000
     classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
-
+    
+    config.checkpoints_prefix = 'ddpm_cont'
+    config.predict = 'noise'
     config.device = 'cuda:0'
     return config
