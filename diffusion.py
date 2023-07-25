@@ -52,10 +52,11 @@ class DiffusionRunner:
             device = torch.device('cpu')
         #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_newt-1.pth
         #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont-50000.pth
-        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont-50000.pth', map_location=device)['model']
+        #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_reversed-50000.pth
+        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
-        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_cont-50000.pth', map_location=device)['ema']
+        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:
@@ -284,6 +285,9 @@ class DiffusionRunner:
         self.switch_to_ema()
 
         images = self.sample_images(1, labels=labels).cpu()
+        nrow = int(math.sqrt(self.config.training.snapshot_batch_size))
+        grid = torchvision.utils.make_grid(images, nrow=nrow).permute(1, 2, 0)
+        grid = grid.data.numpy().astype(np.uint8)
         
         self.switch_back_from_ema()
-        return images
+        return grid

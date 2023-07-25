@@ -78,11 +78,11 @@ class DDPM_SDE:
             def sde(self, x, t):
                 if ode_sampling:
                     drift_sde, _ = sde_fn(x, t)
-                    drift = drift_sde + (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
                     diffusion = 0
                 else:
                     drift_sde, diffuson_sde = sde_fn(x, t)
-                    drift = drift_sde + beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
+                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
                     diffusion = diffuson_sde
                 return drift, diffusion
 
