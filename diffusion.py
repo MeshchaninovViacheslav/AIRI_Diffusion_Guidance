@@ -155,7 +155,7 @@ class DiffusionRunner:
         std = std.view(-1, 1, 1, 1)
         pred = self.calc_score(mean + noise * std, t)
         score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
-        loss = torch.pow(pred['noise'] + noise, 2).mean()
+        loss = torch.pow(pred['noise'] - noise, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
