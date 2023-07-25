@@ -50,10 +50,10 @@ class DiffusionRunner:
         checkpoints_folder: str = self.checkpoints_folder
         if device is None:
             device = torch.device('cpu')
-        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont-10000.pth', map_location=device)['model']
+        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont-50000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
-        ema_ckpt = torch.load(checkpoints_folder + '/ema.pth', map_location=device)
+        ema_ckpt = torch.load(checkpoints_folder + '/ddpm_cont-50000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:
