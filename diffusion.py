@@ -284,10 +284,6 @@ class DiffusionRunner:
         self.model.eval()
         self.switch_to_ema()
 
-        images = self.sample_images(1, labels=labels).cpu()
-        nrow = int(math.sqrt(self.config.training.snapshot_batch_size))
-        grid = torchvision.utils.make_grid(images, nrow=nrow).permute(1, 2, 0)
-        grid = grid.data.numpy().astype(np.uint8)
-        
+        images = self.sample_images(100, labels=labels).cpu()
         self.switch_back_from_ema()
-        return grid
+        return images
