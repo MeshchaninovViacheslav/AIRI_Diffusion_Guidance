@@ -1,4 +1,5 @@
 import ml_collections
+from models.classifier import ResNet, ResidualBlock
 
 
 def create_default_mnist_config():
@@ -64,4 +65,19 @@ def create_default_mnist_config():
     classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
 
     config.device = 'cuda:0'
+
+    # 3 classifier guidance
+    class_guide = config.class_guide = ml_collections.ConfigDict()
+
+    class_guide.checkpoint_path = './ddpm_checkpoints/clean_classifier.pth'
+    class_guide.classifier_args = {
+        "block": ResidualBlock,
+        "layers": [2, 2, 2, 2]
+    }
+    class_guide.model = ResNet
+    # model = ResNet(**classifier_args)
+    # model.to(device)
+
+
+
     return config

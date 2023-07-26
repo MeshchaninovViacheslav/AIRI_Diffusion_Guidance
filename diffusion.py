@@ -17,6 +17,15 @@ from tqdm.auto import trange
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.cuda.amp import GradScaler
 
+from ml_collections import ConfigDict
+import torch
+
+from torchvision.transforms import (
+    Resize,
+    Normalize,
+    Compose,
+)
+
 
 class DiffusionRunner:
     def __init__(
@@ -46,14 +55,27 @@ class DiffusionRunner:
         self.device = device
         self.model.to(device)
 
+    # def restore_parameters(self, device: Optional[torch.device] = None) -> None:
+    #     checkpoints_folder: str = self.checkpoints_folder
+    #     if device is None:
+    #         device = torch.device('cpu')
+    #     print(checkpoints_folder)
+    #     model_ckpt = torch.load(checkpoints_folder + '/model.pth', map_location=device)
+    #     self.model.load_state_dict(model_ckpt)
+
+    #     ema_ckpt = torch.load(checkpoints_folder + '/ema.pth', map_location=device)
+    #     self.ema.load_state_dict(ema_ckpt)
+
+
     def restore_parameters(self, device: Optional[torch.device] = None) -> None:
         checkpoints_folder: str = self.checkpoints_folder
         if device is None:
             device = torch.device('cpu')
-        model_ckpt = torch.load(checkpoints_folder + '/model.pth', map_location=device)
+      
+        model_ckpt = torch.load(checkpoints_folder + 'score_model_20000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
-        ema_ckpt = torch.load(checkpoints_folder + '/ema.pth', map_location=device)
+        ema_ckpt = torch.load(checkpoints_folder + 'score_model_20000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:
@@ -164,7 +186,7 @@ class DiffusionRunner:
         #score-based
         # score = - noise / std # 5
         
-        loss = torch.mean(torch.pow(pred_score["noise"] - noise, 2)) #6
+        loss = torch.mean(torch.pow(pred_score["noise"], 2)) #6
 
         #score-based
         # loss = torch.mean(torch.pow(score + pred_score["score"], 2)) #6
@@ -269,6 +291,8 @@ class DiffusionRunner:
             #TODO
             x_t = torch.randn(shape, device=device)
             times = torch.linspace(self.sde.T - eps, eps, self.sde.N, device=device)
+            # times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
+
             for time in times:
                 t = torch.ones(batch_size, device=device) * time
                 x_t, _ = self.diff_eq_solver.step(x_t, t)
@@ -289,3 +313,92 @@ class DiffusionRunner:
 
         self.switch_back_from_ema()
         self.model.train(prev_mode)
+
+
+class ClassGuidDiffusionRunner(DiffusionRunner):
+    def __init__(self, config: ConfigDict, eval: bool = False):
+        super().__init__(config, eval)
+        self.classifier = self.get_classifier()
+        self.mnist_transforms = Compose([
+                                        Resize((config.data.image_size, config.data.image_size)),
+                                        Normalize(mean=config.data.norm_mean, std=config.data.norm_std),
+                                        ]) 
+    def get_classifier(self):
+        class_model = self.config.class_guide.model
+        classifier = class_model(**self.config.class_guide.classifier_args)
+        classifier.load_state_dict(torch.load(self.config.class_guide.checkpoint_path))
+        classifier.to(self.config.device)
+        classifier.eval()
+        return classifier
+      
+    # def classifier_score(self, 
+    #                      input_x, 
+    #                      y,
+    #                      criterion=torch.nn.CrossEntropyLoss()):
+        
+    #     target_class_index = torch.ones(input_x.shape[0])
+    #     target_class_index = torch.tensor([y]).to(self.config.device)
+    #     input_data  = self.mnist_transforms(input_x)
+    #     input_data  = input_data.to(self.config.device)
+        
+    #     with torch.enable_grad():
+    #         input_data.requires_grad = True
+    #         output = self.classifier(input_data)
+    #         # print(input_data.requires_grad)
+    #         loss = criterion(output, target_class_index)
+    #         loss.backward()
+    #     gradients = input_data.grad
+    #     return gradients    
+
+    # def classifier_score(self, input_data, class_index):
+    #     self.classifier.eval()  # Убедитесь, что модель в режиме оценки (не обучения)
+
+    #     with torch.enable_grad():
+    #         input_data.requires_grad = True  # Позволяет вычислить градиенты для входных данных
+    #         output = self.classifier(input_data)
+    #         # Убедитесь, что class_index соответствует одному из выходов модели
+    #         assert 0 <= class_index < output.size(1), f"Недопустимый class_index: {class_index}"
+    #         # Обнуляем градиенты перед обратным распространением ошибки
+    #         self.classifier.zero_grad()
+    #         # Создаем тензор с единичным значением в нужном классе
+    #         target = torch.zeros_like(output)
+    #         target[:, class_index] = 1
+    #         # Вычисляем функцию потерь (например, кросс-энтропию) между предсказаниями и целевыми значениями
+    #         loss_fn = torch.nn.CrossEntropyLoss()
+    #         loss = loss_fn(output, target.argmax(dim=1))
+    #         # Обратное распространение ошибки для вычисления градиентов входных данных
+    #         loss.backward()
+
+    #     # Получаем градиенты входных данных
+    #     gradients = input_data.grad
+
+    #     return gradients      
+
+    def classifier_score(self, input_data, class_index):
+        self.classifier.eval()
+        self.classifier.zero_grad()
+        with torch.enable_grad():
+            input_data.requires_grad = True
+            output = self.classifier(input_data)
+            output_for_class = output[:, class_index]
+
+            # output_for_class.backward()
+            output_for_class.backward(torch.ones_like(output_for_class))
+            gradients  = input_data.grad
+
+        return gradients
+        
+    def calc_score(self, input_x: torch.Tensor, input_t: torch.Tensor, y=4, gamma=7) -> torch.Tensor:
+    
+        eps = self.model(input_x, input_t)
+        std = self.sde.marginal_std(input_t)
+        std = std.view(-1, 1, 1, 1)
+        ddpm_score = -eps / std
+
+        classifier_score = self.classifier_score(input_x, y)
+        print(classifier_score.mean(), ddpm_score.mean())
+
+        score = ddpm_score + gamma * classifier_score
+
+        return {"score" : score, 
+                "noise" : eps}
