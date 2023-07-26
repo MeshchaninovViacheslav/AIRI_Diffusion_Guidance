@@ -164,7 +164,7 @@ class DiffusionRunner:
         #score-based
         # score = - noise / std # 5
         
-        loss = torch.mean(torch.pow(noise + pred_score["noise"], 2)) #6
+        loss = torch.mean(torch.pow(pred_score["noise"] - noise, 2)) #6
 
         #score-based
         # loss = torch.mean(torch.pow(score + pred_score["score"], 2)) #6
