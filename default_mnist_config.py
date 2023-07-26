@@ -57,13 +57,15 @@ def create_default_mnist_config():
 
     # 2 assignment - train noisy classifier
     classifier = config.classifier = ml_collections.ConfigDict()
+    classifier.type = 'unconditional'
+    classifier.gamma = 4
     classifier.training_iters = 20_000
     classifier.eval_freq = 5_000
     classifier.snapshot_freq = 5_000
     classifier.checkpoint_freq = 5_000
     classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
     
-    config.checkpoints_prefix = 'ddpm_cont'
+    config.checkpoints_prefix = 'ddpm_checkpoints'
     config.predict = 'noise'
     config.device = 'cuda:0'
     return config

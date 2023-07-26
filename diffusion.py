@@ -10,6 +10,9 @@ from models.ddpm import DDPM
 from models.ema import ExponentialMovingAverage
 from ddpm_sde import DDPM_SDE, EulerDiffEqSolver
 from data_generator import DataGenerator
+from models.classifier import ResNet, ResidualBlock
+
+import torch.nn as nn
 
 from ml_collections import ConfigDict
 from typing import Optional, Union
@@ -24,8 +27,12 @@ class DiffusionRunner:
             config: ConfigDict,
             eval: bool = False
     ):
+        
         self.config = config
         self.eval = eval
+
+        device = torch.device(self.config.device)
+        self.device = device
 
         self.model = DDPM(config=config)
         self.sde = DDPM_SDE(config=config)
@@ -39,11 +46,10 @@ class DiffusionRunner:
         self.checkpoints_folder = config.training.checkpoints_folder
         if eval:
             self.ema = ExponentialMovingAverage(self.model.parameters(), config.model.ema_rate)
-            self.restore_parameters()
+            self.restore_parameters(device)
             self.switch_to_ema()
 
-        device = torch.device(self.config.device)
-        self.device = device
+
         self.model.to(device)
 
     def restore_parameters(self, device: Optional[torch.device] = None) -> None:
@@ -55,6 +61,18 @@ class DiffusionRunner:
         #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_reversed-50000.pth
         model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
+
+        if self.config.classifier.type == 'classifier_guidance':
+            classifier_args = {
+                "block": ResidualBlock,
+                "layers": [2, 2, 2, 2]
+            }
+            self.classifier = ResNet(**classifier_args)
+            classifier_checkpoint = torch.load(checkpoints_folder + 'noisy_classifier.pth', map_location=device)
+            self.classifier.load_state_dict(classifier_checkpoint)
+            self.classifier.to(device)
+
+
 
         ema_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
@@ -131,7 +149,20 @@ class DiffusionRunner:
         eps = self.model(input_x, input_t)
         std = self.sde.marginal_std(input_t)
         std = std.view(-1, 1, 1, 1)
-        score = -eps / std
+        score = (-eps / std)
+        if self.config.classifier.type == 'classifier_guidance':
+            with torch.enable_grad():
+                x_clone = input_x.clone().detach().requires_grad_(True)
+                logits = self.classifier(x_clone) # [BS; NUM_CLASSES]
+                log_probs = nn.functional.log_softmax(logits, dim=-1)
+                log_probs = log_probs[torch.arange(len(y)), y]
+                assert log_probs.shape == (input_x.shape[0],), f'{log_probs.shape}'
+
+                log_probs = torch.sum(log_probs)
+
+                likelihood_score = torch.autograd.grad(log_probs, x_clone)[0]
+            score += self.config.classifier.gamma * likelihood_score
+ 
         return {
             'score': score,
             'noise': eps
@@ -261,7 +292,7 @@ class DiffusionRunner:
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
             for time in times:
                 t = torch.ones(batch_size, device=device) * time
-                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t, labels)
 
         return self.inverse_scaler(noisy_x)
 
@@ -280,14 +311,11 @@ class DiffusionRunner:
         self.switch_back_from_ema()
         self.model.train(prev_mode)
         
-    def inference(self, labels = None) -> None:
+    def inference(self, batch_size, labels = None) -> torch.Tensor:
         self.model.eval()
         self.switch_to_ema()
 
-        images = self.sample_images(1, labels=labels).cpu()
-        nrow = int(math.sqrt(self.config.training.snapshot_batch_size))
-        grid = torchvision.utils.make_grid(images, nrow=nrow).permute(1, 2, 0)
-        grid = grid.data.numpy().astype(np.uint8)
-        
+        images = self.sample_images(batch_size, labels=labels).cpu()
+        images = images.type(torch.uint8)
         self.switch_back_from_ema()
-        return grid
+        return images

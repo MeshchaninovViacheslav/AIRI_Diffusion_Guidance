@@ -75,14 +75,14 @@ class DDPM_SDE:
             def T(self):
                 return T
 
-            def sde(self, x, t):
+            def sde(self, x, t, labels=None):
                 if ode_sampling:
                     drift_sde, _ = sde_fn(x, t)
-                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t, labels)['score']
                     diffusion = 0
                 else:
                     drift_sde, diffuson_sde = sde_fn(x, t)
-                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t)['score']
+                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t, labels)['score']
                     diffusion = diffuson_sde
                 return drift, diffusion
 
@@ -96,7 +96,7 @@ class EulerDiffEqSolver:
         self.ode_sampling = ode_sampling
         self.rsde = sde.reverse(score_fn, ode_sampling)
 
-    def step(self, x_t, t):
+    def step(self, x_t, t, labels=None):
         """
         Implement reverse SDE/ODE Euler solver
         """
@@ -107,7 +107,7 @@ class EulerDiffEqSolver:
         """
         dt = -1 / self.rsde.N
         noise = torch.randn_like(x_t)
-        drift, diffusion = self.rsde.sde(x_t, t)
+        drift, diffusion = self.rsde.sde(x_t, t, labels)
         x_mean = x_t + drift * dt
         #print(x_mean.shape, diffusion.shape, noize.shape)
         x = x_mean + diffusion.view(-1, 1, 1, 1) * np.sqrt(-dt) * noise
