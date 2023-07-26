@@ -24,6 +24,8 @@ def create_default_mnist_config():
     model.resamp_with_conv = True
     model.conditional = True
     model.nonlinearity = 'swish'
+    model.num_classes = 10
+    model.class_embed_size = 3
 
     optim = config.optim = ml_collections.ConfigDict()
     optim.grad_clip_norm = 1.0
@@ -45,7 +47,8 @@ def create_default_mnist_config():
     training.batch_size = 256
     training.ode_sampling = False
     training.logging_freq = 10
-    training.exp_name = 'ddpm_cont'
+    training.p_uncond = 0.1
+    training.exp_name = 'ddpm_classifierfree'
 
     training.checkpoints_folder = 'ddpm_checkpoints/'
 
@@ -63,7 +66,7 @@ def create_default_mnist_config():
     classifier.checkpoint_freq = 5_000
     classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
     
-    config.checkpoints_prefix = 'ddpm_cont'
+    config.checkpoints_prefix = 'ddpm_classifierfree'
     config.predict = 'noise'
     config.device = 'cuda:0'
     return config

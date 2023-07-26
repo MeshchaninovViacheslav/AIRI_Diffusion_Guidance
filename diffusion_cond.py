@@ -48,8 +48,8 @@ class DiffusionRunnerConditional(DiffusionRunner):
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        cond = one_hot(cond, self.config.training.num_classes).float()
-        is_class_cond = torch.rand(size=(input_x.shape[0],1), device=input_x.device) >= self.p_uncond
+        cond = one_hot(cond, self.config.model.num_classes).float()
+        is_class_cond = torch.rand(size=(input_x.shape[0],1), device=input_x.device) >= self.config.training.p_uncond
         cond = cond * is_class_cond
         
         eps = self.model(input_x, input_t, cond)
@@ -102,6 +102,8 @@ class DiffusionRunnerConditional(DiffusionRunner):
 
             (X, y) = next(train_generator)
             X = X.to(self.device)
+            y = y.to(self.device)
+            
             with torch.cuda.amp.autocast():
                 loss = self.calc_loss(clean_x=X, cond=y)
             
@@ -134,7 +136,8 @@ class DiffusionRunnerConditional(DiffusionRunner):
         with torch.no_grad():
             for (X, y) in self.datagen.valid_loader:
                 X = X.to(self.device)
-                loss = self.calc_loss(clean_x=X)
+                y = y.to(self.device)
+                loss = self.calc_loss(clean_x=X, cond=y)
                 valid_loss += loss.item() * X.size(0)
                 valid_count += X.size(0)
 
