@@ -28,7 +28,7 @@ wandb.init(project='sde', name='noisy_classifier')
 device = torch.device('cuda')
 classifier_args = {
     "block": ResidualBlock,
-    "layers": [3, 3, 3, 3]
+    "layers": [2, 2, 2, 2]
 }
 model = ResNet(**classifier_args)
 model.to(device)
@@ -45,7 +45,7 @@ val_generator = datagen.valid_loader
 sde = DDPM_SDE(config=config)
 
 TOTAL_ITERS = 2_000
-EVAL_FREQ = 500
+EVAL_FREQ = 200
 
 eps = 1e-5
 
@@ -79,33 +79,44 @@ for iter_idx in trange(1, 1 + TOTAL_ITERS):
     if iter_idx % EVAL_FREQ == 0:
         with torch.no_grad():
             model.eval()
-            valid_loss = 0
-            valid_accuracy = 0
+            
+            size = 5 * config.training.batch_size
+            #T = tqdm(enumerate(val_generator))
+            small_noise_t = torch.ones(size)
+            little_noise_t = (torch.ones(size) * config.sde.N) / 5
+            middle_noise_t = (torch.ones(size) * config.sde.N)  / 2 
+            hard_noise_t = (torch.ones(size) * config.sde.N) - config.sde.N / 4 
+            noises = {'small': small_noise_t,
+                      'little': little_noise_t,
+                      'middle': middle_noise_t,
+                      'hard': hard_noise_t}
+            for name, noise_t in tqdm(noises.items()):
+                valid_loss = 0
+                valid_accuracy = 0
+                T = enumerate(val_generator)
+                for i, (X, y) in T:
+                    #sample timestep t
+                    
+                    # create noise
+                    noise = torch.randn_like(X)
+                 #   print(X.size(), noise_t.size())
+                    mean, std = sde.marginal_prob(X, noise_t)
+                    std = std.view(-1, 1, 1, 1)
+                    # inject noise
+                    X = mean + noise * std
+                    
+                    X = X.to(device)
+                    y = y.to(device)
 
-            T = tqdm(enumerate(val_generator))
-            for i, (X, y) in T:
-                X = X.to(device)
-                y = y.to(device)
+                    output = model(X)
+                    loss = criterion(output, y)
+                    valid_loss += loss.item()
 
-                #sample timestep t
-                t = torch.cuda.FloatTensor(X.shape[0]).uniform_() * (config.sde.N - eps) + eps 
-                # create noise
-                noise = torch.randn_like(X)
-                mean, std = sde.marginal_prob(X, t)
-                std = std.view(-1, 1, 1, 1)
-                # inject noise
-                X = mean + noise * std
+                    acc = accuracy(output, y)
+                    valid_accuracy += acc.item()
 
-
-                output = model(X)
-                loss = criterion(output, y)
-                valid_loss += loss.item()
-
-                acc = accuracy(output, y)
-                valid_accuracy += acc.item()
-
-            log_metric('cross_entropy', 'valid', valid_loss / len(val_generator), step=iter_idx)
-            log_metric('accuracy', 'valid', valid_accuracy / len(val_generator), step=iter_idx)
+                log_metric('cross_entropy', 'valid_{}'.format(name), valid_loss / len(val_generator), step=iter_idx)
+                log_metric('accuracy', 'valid_{}'.format(name), valid_accuracy / len(val_generator), step=iter_idx)
         model.train()
 model.eval()
 
