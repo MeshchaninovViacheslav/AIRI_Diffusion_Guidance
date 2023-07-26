@@ -8,7 +8,7 @@ import numpy as np
 
 from models.ddpm_cond import DDPMCond
 from models.ema import ExponentialMovingAverage
-from ddpm_sde import DDPM_SDE, EulerDiffEqSolver
+from ddpm_sde_cond import DDPM_SDE, EulerDiffEqSolver
 from data_generator import DataGenerator
 from torch.nn.functional import one_hot
 
@@ -113,7 +113,7 @@ class DiffusionRunnerConditional(DiffusionRunner):
             self.optimizer_step(loss)
 
             if iter_idx % self.config.training.snapshot_freq == 0:
-                self.snapshot()
+                self.snapshot(labels=y)
 
             if iter_idx % self.config.training.eval_freq == 0:
                 self.validate()
@@ -167,7 +167,7 @@ class DiffusionRunnerConditional(DiffusionRunner):
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
             for time in times:
                 t = torch.ones(batch_size, device=device) * time
-                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, labels, t)
 
         return self.inverse_scaler(noisy_x)
 
@@ -190,6 +190,6 @@ class DiffusionRunnerConditional(DiffusionRunner):
         self.model.eval()
         self.switch_to_ema()
 
-        images = self.sample_images(100, labels=labels).cpu()
+        images = self.sample_images(len(labels), labels=labels).cpu()
         self.switch_back_from_ema()
         return images
