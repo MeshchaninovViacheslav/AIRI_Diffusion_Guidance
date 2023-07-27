@@ -54,7 +54,7 @@ class DDPMCond(nn.Module):
         self.num_classes = config.model.num_classes
         self.class_embed_size = config.model.class_embed_size
     
-        from models.ddpm_entities import AttnBlock
+        from models.ddpm_entities import AttnBlockGroup as AttnBlock
         AttnBlock = functools.partial(AttnBlock)
         self.conditional = conditional = config.model.conditional
 

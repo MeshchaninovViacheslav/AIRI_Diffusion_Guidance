@@ -139,7 +139,7 @@ class AttnBlock(nn.Module):
 
     def __init__(self, channels):
         super().__init__()
-        self.GroupNorm_0 = nn.GroupNorm(num_groups=1, num_channels=channels, eps=1e-6)
+        self.GroupNorm_0 = nn.GroupNorm(num_groups=32, num_channels=channels, eps=1e-6)
         self.NIN_0 = NIN(channels, channels)
         self.NIN_1 = NIN(channels, channels)
         self.NIN_2 = NIN(channels, channels)
@@ -160,6 +160,37 @@ class AttnBlock(nn.Module):
         h = self.NIN_3(h)
         return x + h
 
+class AttnBlockGroup(nn.Module):
+    """Channel-wise self-attention block."""
+
+    def find_max_num_groups(self, in_channels: int) -> int:
+        for i in range(6, 0, -1):
+            if in_channels % i == 0:
+                return i
+        raise Exception()
+        
+    def __init__(self, channels):
+        super().__init__()
+        self.GroupNorm_0 = nn.GroupNorm(num_groups=self.find_max_num_groups(channels), num_channels=channels, eps=1e-6)
+        self.NIN_0 = NIN(channels, channels)
+        self.NIN_1 = NIN(channels, channels)
+        self.NIN_2 = NIN(channels, channels)
+        self.NIN_3 = NIN(channels, channels, init_scale=0.)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        h = self.GroupNorm_0(x)
+        q = self.NIN_0(h)
+        k = self.NIN_1(h)
+        v = self.NIN_2(h)
+
+        w = torch.einsum('bchw,bcij->bhwij', q, k) * (int(C) ** (-0.5))
+        w = torch.reshape(w, (B, H, W, H * W))
+        w = F.softmax(w, dim=-1)
+        w = torch.reshape(w, (B, H, W, H, W))
+        h = torch.einsum('bhwij,bcij->bchw', w, v)
+        h = self.NIN_3(h)
+        return x + h
 
 class Upsample(nn.Module):
     def __init__(self, channels, with_conv=False):
@@ -246,7 +277,7 @@ class ResnetBlockDDPMGroup(nn.Module):
     """The ResNet Blocks used in DDPM."""
     
     def find_max_num_groups(self, in_channels: int) -> int:
-        for i in range(4, 0, -1):
+        for i in range(5, 0, -1):
             if in_channels % i == 0:
                 return i
         raise Exception()
