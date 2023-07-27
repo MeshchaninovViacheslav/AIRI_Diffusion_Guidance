@@ -3,12 +3,13 @@ import torchvision
 import wandb
 import os
 import math
+from tqdm import tqdm
 
 import numpy as np
 
 from models.ddpm_cond import DDPMCond
 from models.ema import ExponentialMovingAverage
-from ddpm_sde_cond import DDPM_SDECond as DDPM_SDE, EulerDiffEqSolverCond as EulerDiffEqSolver
+from ddpm_sde_cond import DDPM_SDECond, EulerDiffEqSolverCond
 from data_generator import DataGenerator
 from torch.nn.functional import one_hot
 
@@ -29,8 +30,8 @@ class DiffusionRunnerConditional(DiffusionRunner):
         self.config = config
 
         self.model = DDPMCond(config=config)
-        self.sde = DDPM_SDE(config=config)
-        self.diff_eq_solver = EulerDiffEqSolver(
+        self.sde = DDPM_SDECond(config=config)
+        self.diff_eq_solver = EulerDiffEqSolverCond(
             self.sde,
             self.calc_score_classifier_free,
             ode_sampling=config.training.ode_sampling
@@ -38,7 +39,15 @@ class DiffusionRunnerConditional(DiffusionRunner):
         
         device = torch.device(self.config.device)
         self.device = device
+        self.model = torch.nn.DataParallel(self.model)
         self.model.to(device)
+
+        self.inverse_scaler = lambda x: torch.clip(127.5 * (x + 1), 0, 255)
+        self.checkpoints_folder = config.training.checkpoints_folder
+        if eval:
+            self.ema = ExponentialMovingAverage(self.model.parameters(), config.model.ema_rate)
+            self.restore_parameters()
+            self.switch_to_ema()
 
     def calc_score(self, input_x: torch.Tensor, input_t: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
         """
@@ -69,9 +78,9 @@ class DiffusionRunnerConditional(DiffusionRunner):
         
         #print(input_x.device, input_t.device, cond.device)
         
-        eps1 = self.model(input_x, input_t, cond)
-        eps2 = self.model(input_x, input_t, cond * 0)
-        eps = (1 + 0.1) * eps1 - 0.1 * eps2
+        cond_noise = self.model(input_x, input_t, cond)
+        uncond_noise = self.model(input_x, input_t, torch.zeros_like(cond))
+        eps = (1 + 0.1) * cond_noise - 0.1 * uncond_noise
         std = self.sde.marginal_std(input_t)
         std = std.view(-1, 1, 1, 1)
         score = -eps / std
@@ -185,9 +194,9 @@ class DiffusionRunnerConditional(DiffusionRunner):
             """
             noisy_x = torch.randn(shape, device=device)
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
-            for time in times:
+            for time in tqdm(times):
                 t = torch.ones(batch_size, device=device) * time
-                noisy_x, _ = self.diff_eq_solver.step(noisy_x, labels, t)
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t, labels)
 
         return self.inverse_scaler(noisy_x)
 

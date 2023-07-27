@@ -25,11 +25,11 @@ def create_default_mnist_config():
     model.conditional = True
     model.nonlinearity = 'swish'
     model.num_classes = 10
-    model.class_embed_size = 3
+    model.class_embed_size = 16
 
     optim = config.optim = ml_collections.ConfigDict()
     optim.grad_clip_norm = 1.0
-    optim.linear_warmup = 4000
+    optim.linear_warmup = 1000
     optim.lr = 2e-4
     optim.min_lr = 2e-4
     optim.warmup_lr = 0
@@ -43,7 +43,7 @@ def create_default_mnist_config():
     training.checkpoint_freq = 5_000
     training.eval_freq = 2500
     training.snapshot_freq = 1000
-    training.snapshot_batch_size = 100
+    training.snapshot_batch_size = 10
     training.batch_size = 256
     training.ode_sampling = False
     training.logging_freq = 10
@@ -68,5 +68,5 @@ def create_default_mnist_config():
     
     config.checkpoints_prefix = 'ddpm_classifierfree'
     config.predict = 'noise'
-    config.device = 'cuda:0'
+    config.device = 'cuda'
     return config

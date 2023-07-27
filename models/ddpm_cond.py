@@ -22,9 +22,7 @@ class ResnetBlockDDPMConditional(ResnetBlockDDPMGroup):
         super().__init__(act, in_ch + class_embed_size, out_ch, temb_dim, conv_shortcut, dropout)
 
         self.linear_map_class = nn.Sequential(
-            nn.Linear(num_classes, class_embed_size),
-            nn.ReLU(),
-            nn.Linear(class_embed_size, class_embed_size)
+            nn.Linear(num_classes, class_embed_size)
         )
     
     def forward(self, x, c, temb=None):
