@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-class DDPM_SDE:
+class DDPM_SDECond:
     def __init__(self, config):
         """Construct a Variance Preserving SDE.
 
@@ -78,18 +78,18 @@ class DDPM_SDE:
             def sde(self, x, cond, t):
                 if ode_sampling:
                     drift_sde, _ = sde_fn(x, t)
-                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * ((1+0.1) * score_fn(x, t, cond)['score'] - 0.1 * score_fn(x, t, cond * 0)
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t, cond)['score']
                     diffusion = 0
                 else:
                     drift_sde, diffuson_sde = sde_fn(x, t)
-                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * ((1+0.1) * score_fn(x, t, cond)['score'] - 0.1 * score_fn(x, t, cond * 0)
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t, cond)['score']
                     diffusion = diffuson_sde
                 return drift, diffusion
 
         return RSDE()
 
 
-class EulerDiffEqSolver:
+class EulerDiffEqSolverCond:
     def __init__(self, sde, score_fn, ode_sampling=False):
         self.sde = sde
         self.score_fn = score_fn

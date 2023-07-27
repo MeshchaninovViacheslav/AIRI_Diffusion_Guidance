@@ -11,28 +11,30 @@ from models.ddpm_entities import (
     ddpm_conv3x3,
     get_act,
     default_init,
-    get_timestep_embedding
+    get_timestep_embedding,
+    ResnetBlockDDPMGroup
 )
 
-class ResnetBlockDDPMConditional(ResnetBlockDDPM):
+class ResnetBlockDDPMConditional(ResnetBlockDDPMGroup):
     """The ResNet Blocks used in DDPM."""
 
     def __init__(self, act, in_ch, num_classes, class_embed_size, out_ch=None, temb_dim=None, conv_shortcut=False, dropout=0.1):
-        super().__init__(act, in_ch, out_ch, temb_dim, conv_shortcut, dropout)
+        super().__init__(act, in_ch + class_embed_size, out_ch, temb_dim, conv_shortcut, dropout)
 
         self.linear_map_class = nn.Sequential(
             nn.Linear(num_classes, class_embed_size),
             nn.ReLU(),
             nn.Linear(class_embed_size, class_embed_size)
-
         )
     
     def forward(self, x, c, temb=None):
+        #print(x.shape)
         emb_c  = self.linear_map_class(c)
         emb_c = emb_c.view(*emb_c.shape, 1, 1)
         emb_c = emb_c.expand(-1, -1, x.shape[-2], x.shape[-1])
 
         x = torch.cat([x, emb_c], dim=1)
+        #print(x.shape)
         return super().forward(x, temb)
 
 
@@ -89,14 +91,15 @@ class DDPMCond(nn.Module):
                 hs_c.append(in_ch)
 
         in_ch = hs_c[-1]
-        modules.append(ResnetBlock(in_ch=in_ch))
+        modules.append(ResnetBlock(in_ch=in_ch, out_ch=64))
         modules.append(AttnBlock(channels=in_ch))
-        modules.append(ResnetBlock(in_ch=in_ch))
+        modules.append(ResnetBlock(in_ch=in_ch, out_ch=64))
 
         # Upsampling block
         for i_level in reversed(range(num_resolutions)):
             for i_block in range(num_res_blocks + 1):
                 out_ch = nf * ch_mult[i_level]
+                #print(in_ch, hs_c[-1])
                 modules.append(ResnetBlock(in_ch=in_ch + hs_c.pop(), out_ch=out_ch))
                 in_ch = out_ch
             if all_resolutions[i_level] in attn_resolutions:
@@ -105,7 +108,7 @@ class DDPMCond(nn.Module):
                 modules.append(Upsample(channels=in_ch, with_conv=resamp_with_conv))
 
         assert not hs_c
-        modules.append(nn.GroupNorm(num_channels=in_ch, num_groups=32, eps=1e-6))
+        modules.append(nn.GroupNorm(num_channels=in_ch, num_groups=1, eps=1e-6))
         modules.append(ddpm_conv3x3(in_ch, channels, init_scale=0.))
         self.all_modules = nn.ModuleList(modules)
 
@@ -135,7 +138,8 @@ class DDPMCond(nn.Module):
         for i_level in range(self.num_resolutions):
             # Residual blocks for this resolution
             for i_block in range(self.num_res_blocks):
-                h = modules[m_idx](hs[-1], temb)
+                #print(hs[-1].shape, temb.shape)
+                h = modules[m_idx](hs[-1], c, temb)
                 m_idx += 1
                 if h.shape[-1] in self.attn_resolutions:
                     h = modules[m_idx](h)
@@ -146,17 +150,20 @@ class DDPMCond(nn.Module):
                 m_idx += 1
 
         h = hs[-1]
-        h = modules[m_idx](h, temb)
+        h = modules[m_idx](h, c, temb)
         m_idx += 1
         h = modules[m_idx](h)
         m_idx += 1
-        h = modules[m_idx](h, temb)
+        h = modules[m_idx](h, c, temb)
         m_idx += 1
 
         # Upsampling block
         for i_level in reversed(range(self.num_resolutions)):
             for i_block in range(self.num_res_blocks + 1):
-                h = modules[m_idx](torch.cat([h, hs.pop()], dim=1), temb)
+                #print('before')
+                #print(hs[-1].shape)
+                #print(h.shape)
+                h = modules[m_idx](torch.cat([h, hs.pop()], dim=1), c, temb)
                 m_idx += 1
             if h.shape[-1] in self.attn_resolutions:
                 h = modules[m_idx](h)

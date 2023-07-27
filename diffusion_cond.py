@@ -8,7 +8,7 @@ import numpy as np
 
 from models.ddpm_cond import DDPMCond
 from models.ema import ExponentialMovingAverage
-from ddpm_sde_cond import DDPM_SDE, EulerDiffEqSolver
+from ddpm_sde_cond import DDPM_SDECond as DDPM_SDE, EulerDiffEqSolverCond as EulerDiffEqSolver
 from data_generator import DataGenerator
 from torch.nn.functional import one_hot
 
@@ -32,10 +32,13 @@ class DiffusionRunnerConditional(DiffusionRunner):
         self.sde = DDPM_SDE(config=config)
         self.diff_eq_solver = EulerDiffEqSolver(
             self.sde,
-            self.calc_score,
+            self.calc_score_classifier_free,
             ode_sampling=config.training.ode_sampling
         )
-
+        
+        device = torch.device(self.config.device)
+        self.device = device
+        self.model.to(device)
 
     def calc_score(self, input_x: torch.Tensor, input_t: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
         """
@@ -56,6 +59,23 @@ class DiffusionRunnerConditional(DiffusionRunner):
         std = self.sde.marginal_std(input_t)
         std = std.view(-1, 1, 1, 1)
         score = -eps / std
+        return {
+            'score': score,
+            'noise': eps
+        }
+    
+    def calc_score_classifier_free(self, input_x: torch.Tensor, input_t: torch.Tensor, cond: torch.Tensor):
+        cond = one_hot(cond, self.config.model.num_classes).float()
+        
+        #print(input_x.device, input_t.device, cond.device)
+        
+        eps1 = self.model(input_x, input_t, cond)
+        eps2 = self.model(input_x, input_t, cond * 0)
+        eps = (1 + 0.1) * eps1 - 0.1 * eps2
+        std = self.sde.marginal_std(input_t)
+        std = std.view(-1, 1, 1, 1)
+        score = -eps / std
+        
         return {
             'score': score,
             'noise': eps
@@ -177,8 +197,8 @@ class DiffusionRunnerConditional(DiffusionRunner):
         self.model.eval()
         self.switch_to_ema()
 
-        images = self.sample_images(self.config.training.snapshot_batch_size, labels=labels).cpu()
-        nrow = int(math.sqrt(self.config.training.snapshot_batch_size))
+        images = self.sample_images(len(labels), labels=labels).cpu()
+        nrow = int(math.sqrt(len(labels)))
         grid = torchvision.utils.make_grid(images, nrow=nrow).permute(1, 2, 0)
         grid = grid.data.numpy().astype(np.uint8)
         self.log_metric('images', 'from_noise', wandb.Image(grid))
