@@ -42,7 +42,7 @@ def create_default_mnist_config():
     training.eval_freq = 2500
     training.snapshot_freq = 1000
     training.snapshot_batch_size = 100
-    training.batch_size = 256
+    training.batch_size = 64
     training.ode_sampling = False
     training.logging_freq = 10
     training.exp_name = 'ddpm_cont'
@@ -57,8 +57,8 @@ def create_default_mnist_config():
 
     # 2 assignment - train noisy classifier
     classifier = config.classifier = ml_collections.ConfigDict()
-    classifier.type = 'unconditional'
-    classifier.gamma = 4
+    classifier.type = 'uncond'
+    classifier.gamma = 8
     classifier.training_iters = 20_000
     classifier.eval_freq = 5_000
     classifier.snapshot_freq = 5_000

@@ -33,7 +33,7 @@ classifier_args = {
 model = ResNet(**classifier_args)
 model.to(device)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
 criterion = torch.nn.CrossEntropyLoss()
 
 config = create_default_mnist_config()
@@ -59,7 +59,7 @@ for iter_idx in trange(1, 1 + TOTAL_ITERS):
     (X, y) = next(train_generator)
 
     #sample timestep t
-    t = torch.FloatTensor(X.shape[0]).uniform_() * (config.sde.N - eps) + eps 
+    t = torch.FloatTensor(X.shape[0]).uniform_() * (1 - eps) + eps 
     # create noise
     noise = torch.randn_like(X)
     mean, std = sde.marginal_prob(X, t)
@@ -74,6 +74,7 @@ for iter_idx in trange(1, 1 + TOTAL_ITERS):
     loss = criterion(output, y)
     loss.backward()
     optimizer.step()
+   # print(loss.item())
     log_metric('loss', 'train', loss.item(), step=iter_idx)
 
     if iter_idx % EVAL_FREQ == 0:
@@ -82,10 +83,10 @@ for iter_idx in trange(1, 1 + TOTAL_ITERS):
             
             size = 5 * config.training.batch_size
             #T = tqdm(enumerate(val_generator))
-            small_noise_t = torch.ones(size)
-            little_noise_t = (torch.ones(size) * config.sde.N) / 5
-            middle_noise_t = (torch.ones(size) * config.sde.N)  / 2 
-            hard_noise_t = (torch.ones(size) * config.sde.N) - config.sde.N / 4 
+            small_noise_t = torch.ones(size) * eps
+            little_noise_t = (torch.ones(size)) / 5
+            middle_noise_t = (torch.ones(size))  / 2 
+            hard_noise_t = (torch.ones(size)) - 1 / 4 
             noises = {'small': small_noise_t,
                       'little': little_noise_t,
                       'middle': middle_noise_t,

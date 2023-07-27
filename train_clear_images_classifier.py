@@ -27,7 +27,7 @@ wandb.init(project='sde', name='clean_classifier')
 device = torch.device('cuda')
 classifier_args = {
     "block": ResidualBlock,
-    "layers": [2, 2, 2, 2]
+    "layers": [4, 4, 4, 4]
 }
 model = ResNet(**classifier_args)
 model.to(device)

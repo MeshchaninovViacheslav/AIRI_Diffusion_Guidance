@@ -19,6 +19,8 @@ from typing import Optional, Union
 from tqdm.auto import trange
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.cuda.amp import GradScaler
+from torch.nn.parallel import DataParallel
+
 
 
 class DiffusionRunner:
@@ -51,6 +53,7 @@ class DiffusionRunner:
 
 
         self.model.to(device)
+        self.model = DataParallel(self.model)
 
     def restore_parameters(self, device: Optional[torch.device] = None) -> None:
         checkpoints_folder: str = self.checkpoints_folder
@@ -62,6 +65,8 @@ class DiffusionRunner:
         model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
+        
+
         if self.config.classifier.type == 'classifier_guidance':
             classifier_args = {
                 "block": ResidualBlock,
@@ -71,6 +76,7 @@ class DiffusionRunner:
             classifier_checkpoint = torch.load(checkpoints_folder + 'noisy_classifier.pth', map_location=device)
             self.classifier.load_state_dict(classifier_checkpoint)
             self.classifier.to(device)
+            self.classifier = DataParallel(self.classifier)
 
 
 
