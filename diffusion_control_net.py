@@ -6,9 +6,11 @@ import math
 
 import numpy as np
 
+from models.control_net import ControlNet
 from models.ddpm import DDPM
 from models.ema import ExponentialMovingAverage
-from ddpm_sde import DDPM_SDE, EulerDiffEqSolver
+from ddpm_sde_cond import DDPM_SDECond as DDPM_SDE, EulerDiffEqSolverCond as EulerDiffEqSolver
+
 from data_generator import DataGenerator
 
 from ml_collections import ConfigDict
@@ -18,16 +20,29 @@ from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.cuda.amp import GradScaler
 
 
-class DiffusionRunner:
+def freeze(model):
+    for p in model.parameters():
+        p.requires_grad = False
+
+
+class ControlNetRunner:
     def __init__(
             self,
             config: ConfigDict,
+            ckpt_path: str,
             eval: bool = False
     ):
         self.config = config
         self.eval = eval
 
-        self.model = DDPM(config=config)
+        device = torch.device(self.config.device)
+
+        ddpm = DDPM(config=config)
+        ddpm.load_state_dict(torch.load(ckpt_path, map_location=device)['model'])
+        freeze(ddpm)
+
+        self.model = ControlNet(config=config, ddpm=ddpm)
+
         self.sde = DDPM_SDE(config=config)
         self.diff_eq_solver = EulerDiffEqSolver(
             self.sde,
@@ -42,7 +57,6 @@ class DiffusionRunner:
             self.restore_parameters()
             self.switch_to_ema()
 
-        device = torch.device(self.config.device)
         self.device = device
         self.model.to(device)
 
@@ -50,10 +64,10 @@ class DiffusionRunner:
         checkpoints_folder: str = self.checkpoints_folder
         if device is None:
             device = torch.device('cpu')
-        model_ckpt = torch.load(checkpoints_folder + '/model.pth', map_location=device)
+        model_ckpt = torch.load(checkpoints_folder + 'ddpm_classifierfree-15000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
-        ema_ckpt = torch.load(checkpoints_folder + '/ema.pth', map_location=device)
+        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_classifierfree-15000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:
@@ -125,12 +139,22 @@ class DiffusionRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        pred_noize = self.model(input_x, input_t)
-        std = self.sde.marginal_std(input_t).view(-1, 1, 1, 1)
-        score = -pred_noize / std
-        return score
+        for p in self.model.parameters():
+            print(p.grad)
+            break
+        eps = self.model(input_x, input_t, y=y)
+        for p in self.model.parameters():
+            print(p.grad)
+            break
+        std = self.sde.marginal_std(input_t)
+        std = std.view(-1, 1, 1, 1)
+        score = -eps / std
+        return {
+            'score': score,
+            'noise': eps
+        }
 
-    def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5) -> Union[float, torch.Tensor]:
+    def calc_loss(self, clean_x: torch.Tensor, eps: float = 1e-5, y: torch.Tensor = None) -> Union[float, torch.Tensor]:
         """
         Define score-matching MSE loss
         input:
@@ -148,9 +172,10 @@ class DiffusionRunner:
         t = self.sample_time(clean_x.shape[0], eps)
         mean, std = self.sde.marginal_prob(clean_x, t)
         noise = torch.randn_like(clean_x)
-        pred_score = self.calc_score(mean + noise * std, t)
-        score = -noise / self.sde.marginal_std(t)
-        loss = torch.pow(score - pred_score, 2).mean()
+        std = std.view(-1, 1, 1, 1)
+        pred = self.calc_score(mean + noise * std, t, y=y)
+        score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
+        loss = torch.pow(pred['noise'] - noise, 2).mean()
         return loss
 
     def set_data_generator(self) -> None:
@@ -165,7 +190,7 @@ class DiffusionRunner:
         train_generator = self.datagen.sample_train()
         self.step = 0
 
-        wandb.init(project='sde', name='ddpm_cont')
+        wandb.init(project='sde', name=self.config.training.exp_name)
 
         self.ema = ExponentialMovingAverage(self.model.parameters(), self.config.model.ema_rate)
         self.model.train()
@@ -174,14 +199,19 @@ class DiffusionRunner:
 
             (X, y) = next(train_generator)
             X = X.to(self.device)
-            with torch.autocast(device_type='cuda', dtype=torch.float32):
-                loss = self.calc_loss(clean_x=X)
+            y = y.to(self.device)
 
-            self.log_metric('loss', 'train', loss.item())
+            with torch.cuda.amp.autocast():
+                loss = self.calc_loss(clean_x=X, y=y)
+                print("LOSS", loss.is_leaf)
+
+            if iter_idx % self.config.training.logging_freq == 0:
+                self.log_metric('loss', 'train', loss.item())
+
             self.optimizer_step(loss)
 
             if iter_idx % self.config.training.snapshot_freq == 0:
-                self.snapshot()
+                self.snapshot(labels=y)
 
             if iter_idx % self.config.training.eval_freq == 0:
                 self.validate()
@@ -204,7 +234,8 @@ class DiffusionRunner:
         with torch.no_grad():
             for (X, y) in self.datagen.valid_loader:
                 X = X.to(self.device)
-                loss = self.calc_loss(clean_x=X)
+                y = y.to(self.device)
+                loss = self.calc_loss(clean_x=X, cond=y)
                 valid_loss += loss.item() * X.size(0)
                 valid_count += X.size(0)
 
@@ -213,23 +244,6 @@ class DiffusionRunner:
 
         self.switch_back_from_ema()
         self.model.train(prev_mode)
-
-    def save_checkpoint(self) -> None:
-        os.makedirs(self.checkpoints_folder, exist_ok=True)
-        prefix = f"{self.config.checkpoints_prefix}-{self.step}"
-        file_path = os.path.join(self.checkpoints_folder, prefix + ".pth")
-        torch.save(
-            {
-                "model": self.model.state_dict(),
-                "ema": self.ema.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-                "scheduler": self.scheduler.state_dict(),
-                "scaler": self.grad_scaler.state_dict(),
-                "step": self.step,
-            },
-            file_path
-        )
-        print(f"Save model to: {file_path}")
 
     def sample_images(
             self, batch_size: int,
@@ -247,11 +261,11 @@ class DiffusionRunner:
             """
             Implement cycle for Euler RSDE sampling w.r.t labels  
             """
-            noisy_x = torch.rand(shape, device=device)
+            noisy_x = torch.randn(shape, device=device)
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
             for time in times:
-                t = torch.cuda.FloatTensor(batch_size) * time
-                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t)
+                t = torch.ones(batch_size, device=device) * time
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, labels, t)
 
         return self.inverse_scaler(noisy_x)
 
@@ -269,3 +283,12 @@ class DiffusionRunner:
 
         self.switch_back_from_ema()
         self.model.train(prev_mode)
+
+    def inference(self, labels=None) -> None:
+        self.model.eval()
+        self.switch_to_ema()
+
+        images = self.sample_images(len(labels), labels=labels).cpu()
+        self.switch_back_from_ema()
+        return images
+
