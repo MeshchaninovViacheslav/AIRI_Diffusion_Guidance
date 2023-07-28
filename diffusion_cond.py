@@ -26,7 +26,7 @@ class DiffusionRunnerConditional(DiffusionRunner):
             config: ConfigDict,
             eval: bool = False
     ):
-        super().__init__(config, eval)
+        super().__init__(config, eval=False)
         self.config = config
 
         self.model = DDPMCond(config=config)
@@ -215,10 +215,11 @@ class DiffusionRunnerConditional(DiffusionRunner):
         self.switch_back_from_ema()
         self.model.train(prev_mode)
         
-    def inference(self, labels = None) -> None:
+    def inference(self, batch_size, labels = None) -> torch.Tensor:
         self.model.eval()
         self.switch_to_ema()
 
-        images = self.sample_images(len(labels), labels=labels).cpu()
+        images = self.sample_images(batch_size, labels=labels).cpu()
+        images = images.type(torch.uint8)
         self.switch_back_from_ema()
         return images

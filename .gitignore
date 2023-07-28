@@ -6,3 +6,5 @@ mnist_classifier_guidance_set/
 mnist_generated_samples/
 models/__pycache__/
 wandb/
+test.ipynb
+mnist_classifier_free_set/

@@ -69,4 +69,5 @@ def create_default_mnist_config():
     config.checkpoints_prefix = 'ddpm_classifierfree'
     config.predict = 'noise'
     config.device = 'cuda'
+    config.chkp_name = 'ddpm_classifierfree-10000.pth'
     return config
