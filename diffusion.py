@@ -331,49 +331,7 @@ class ClassGuidDiffusionRunner(DiffusionRunner):
         classifier.eval()
         return classifier
       
-    # def classifier_score(self, 
-    #                      input_x, 
-    #                      y,
-    #                      criterion=torch.nn.CrossEntropyLoss()):
-        
-    #     target_class_index = torch.ones(input_x.shape[0])
-    #     target_class_index = torch.tensor([y]).to(self.config.device)
-    #     input_data  = self.mnist_transforms(input_x)
-    #     input_data  = input_data.to(self.config.device)
-        
-    #     with torch.enable_grad():
-    #         input_data.requires_grad = True
-    #         output = self.classifier(input_data)
-    #         # print(input_data.requires_grad)
-    #         loss = criterion(output, target_class_index)
-    #         loss.backward()
-    #     gradients = input_data.grad
-    #     return gradients    
-
-    # def classifier_score(self, input_data, class_index):
-    #     self.classifier.eval()  # Убедитесь, что модель в режиме оценки (не обучения)
-
-    #     with torch.enable_grad():
-    #         input_data.requires_grad = True  # Позволяет вычислить градиенты для входных данных
-    #         output = self.classifier(input_data)
-    #         # Убедитесь, что class_index соответствует одному из выходов модели
-    #         assert 0 <= class_index < output.size(1), f"Недопустимый class_index: {class_index}"
-    #         # Обнуляем градиенты перед обратным распространением ошибки
-    #         self.classifier.zero_grad()
-    #         # Создаем тензор с единичным значением в нужном классе
-    #         target = torch.zeros_like(output)
-    #         target[:, class_index] = 1
-    #         # Вычисляем функцию потерь (например, кросс-энтропию) между предсказаниями и целевыми значениями
-    #         loss_fn = torch.nn.CrossEntropyLoss()
-    #         loss = loss_fn(output, target.argmax(dim=1))
-    #         # Обратное распространение ошибки для вычисления градиентов входных данных
-    #         loss.backward()
-
-    #     # Получаем градиенты входных данных
-    #     gradients = input_data.grad
-
-    #     return gradients      
-
+  
     def classifier_score(self, input_data, class_index):
         self.classifier.eval()
         self.classifier.zero_grad()
