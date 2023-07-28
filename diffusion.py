@@ -388,7 +388,7 @@ class ClassGuidDiffusionRunner(DiffusionRunner):
 
         return gradients
         
-    def calc_score(self, input_x: torch.Tensor, input_t: torch.Tensor, y=4, gamma=7) -> torch.Tensor:
+    def calc_score(self, input_x: torch.Tensor, input_t: torch.Tensor, y=9, gamma=7) -> torch.Tensor:
     
         eps = self.model(input_x, input_t)
         std = self.sde.marginal_std(input_t)

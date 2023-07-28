@@ -30,7 +30,8 @@ class DataGenerator:
             MNIST(root='../data', download=True, train=False, transform=self.mnist_transforms),
             batch_size=5 * config.training.batch_size,
             shuffle=False,
-            drop_last=False
+            # drop_last=False,
+            drop_last=True
         )
 
     def sample_train(self):

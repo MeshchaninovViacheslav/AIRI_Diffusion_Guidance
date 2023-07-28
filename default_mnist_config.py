@@ -69,7 +69,7 @@ def create_default_mnist_config():
     # 3 classifier guidance
     class_guide = config.class_guide = ml_collections.ConfigDict()
 
-    class_guide.checkpoint_path = './ddpm_checkpoints/clean_classifier.pth'
+    class_guide.checkpoint_path = './ddpm_checkpoints/noisy_classifier.pth'
     class_guide.classifier_args = {
         "block": ResidualBlock,
         "layers": [2, 2, 2, 2]
