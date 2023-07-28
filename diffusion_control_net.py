@@ -1,7 +1,6 @@
 import torch
 import torchvision
 import wandb
-import os
 import math
 
 import numpy as np
@@ -9,7 +8,7 @@ import numpy as np
 from models.control_net import ControlNet
 from models.ddpm import DDPM
 from models.ema import ExponentialMovingAverage
-from ddpm_sde_cond import DDPM_SDECond as DDPM_SDE, EulerDiffEqSolverCond as EulerDiffEqSolver
+from ddpm_sde_cond import DDPM_SDECond, EulerDiffEqSolverCond
 
 from data_generator import DataGenerator
 
@@ -18,6 +17,7 @@ from typing import Optional, Union
 from tqdm.auto import trange
 from timm.scheduler.cosine_lr import CosineLRScheduler
 from torch.cuda.amp import GradScaler
+from diffusion import DiffusionRunner
 
 
 def freeze(model):
@@ -25,7 +25,7 @@ def freeze(model):
         p.requires_grad = False
 
 
-class ControlNetRunner:
+class ControlNetRunner(DiffusionRunner):
     def __init__(
             self,
             config: ConfigDict,
@@ -40,11 +40,12 @@ class ControlNetRunner:
         ddpm = DDPM(config=config)
         ddpm.load_state_dict(torch.load(ckpt_path, map_location=device)['model'])
         freeze(ddpm)
+        ddpm.eval()
 
         self.model = ControlNet(config=config, ddpm=ddpm)
 
-        self.sde = DDPM_SDE(config=config)
-        self.diff_eq_solver = EulerDiffEqSolver(
+        self.sde = DDPM_SDECond(config=config)
+        self.diff_eq_solver = EulerDiffEqSolverCond(
             self.sde,
             self.calc_score,
             ode_sampling=config.training.ode_sampling
@@ -64,10 +65,10 @@ class ControlNetRunner:
         checkpoints_folder: str = self.checkpoints_folder
         if device is None:
             device = torch.device('cpu')
-        model_ckpt = torch.load(checkpoints_folder + 'ddpm_classifierfree-15000.pth', map_location=device)['model']
+        model_ckpt = torch.load(checkpoints_folder + 'ddpm_controlnet-15000.pth', map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
-        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_classifierfree-15000.pth', map_location=device)['ema']
+        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_controlnet-15000.pth', map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:
@@ -83,7 +84,7 @@ class ControlNetRunner:
 
     def set_optimizer(self) -> None:
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
+            self.model.all_modules.parameters(),
             lr=self.config.optim.lr,
             betas=self.config.optim.betas,
             eps=self.config.optim.eps,
@@ -107,7 +108,7 @@ class ControlNetRunner:
         self.grad_scaler.scale(loss).backward()
         self.grad_scaler.unscale_(self.optimizer)
 
-        grad_norm = torch.sqrt(sum([torch.sum(t.grad ** 2) for t in self.model.parameters()]))
+        grad_norm = torch.sqrt(sum([torch.sum(t.grad ** 2) for t in self.model.all_modules.parameters()]))
 
         if self.grad_clip_norm is not None:
             torch.nn.utils.clip_grad_norm_(
@@ -139,13 +140,7 @@ class ControlNetRunner:
             2) calculate std of input_x
             3) calculate score = -pred_noize / std
         """
-        for p in self.model.parameters():
-            print(p.grad)
-            break
         eps = self.model(input_x, input_t, y=y)
-        for p in self.model.parameters():
-            print(p.grad)
-            break
         std = self.sde.marginal_std(input_t)
         std = std.view(-1, 1, 1, 1)
         score = -eps / std
@@ -174,7 +169,6 @@ class ControlNetRunner:
         noise = torch.randn_like(clean_x)
         std = std.view(-1, 1, 1, 1)
         pred = self.calc_score(mean + noise * std, t, y=y)
-        score = -noise / self.sde.marginal_std(t).view(-1, 1, 1, 1)
         loss = torch.pow(pred['noise'] - noise, 2).mean()
         return loss
 
@@ -194,6 +188,7 @@ class ControlNetRunner:
 
         self.ema = ExponentialMovingAverage(self.model.parameters(), self.config.model.ema_rate)
         self.model.train()
+        self.model.ddpm.eval()
         for iter_idx in trange(1, 1 + self.config.training.training_iters):
             self.step = iter_idx
 
@@ -203,7 +198,6 @@ class ControlNetRunner:
 
             with torch.cuda.amp.autocast():
                 loss = self.calc_loss(clean_x=X, y=y)
-                print("LOSS", loss.is_leaf)
 
             if iter_idx % self.config.training.logging_freq == 0:
                 self.log_metric('loss', 'train', loss.item())
@@ -211,6 +205,7 @@ class ControlNetRunner:
             self.optimizer_step(loss)
 
             if iter_idx % self.config.training.snapshot_freq == 0:
+                y = torch.LongTensor([i for i in range(10)] * 10).to(self.device)
                 self.snapshot(labels=y)
 
             if iter_idx % self.config.training.eval_freq == 0:
@@ -235,7 +230,7 @@ class ControlNetRunner:
             for (X, y) in self.datagen.valid_loader:
                 X = X.to(self.device)
                 y = y.to(self.device)
-                loss = self.calc_loss(clean_x=X, cond=y)
+                loss = self.calc_loss(clean_x=X, y=y)
                 valid_loss += loss.item() * X.size(0)
                 valid_count += X.size(0)
 
@@ -244,6 +239,7 @@ class ControlNetRunner:
 
         self.switch_back_from_ema()
         self.model.train(prev_mode)
+        self.model.ddpm.eval()
 
     def sample_images(
             self, batch_size: int,
@@ -265,7 +261,7 @@ class ControlNetRunner:
             times = torch.linspace(self.sde.T - eps, 0, self.sde.N, device=device) + eps
             for time in times:
                 t = torch.ones(batch_size, device=device) * time
-                noisy_x, _ = self.diff_eq_solver.step(noisy_x, labels, t)
+                noisy_x, _ = self.diff_eq_solver.step(noisy_x, t, labels)
 
         return self.inverse_scaler(noisy_x)
 
@@ -275,6 +271,9 @@ class ControlNetRunner:
         self.model.eval()
         self.switch_to_ema()
 
+        if len(labels) > self.config.training.snapshot_batch_size:
+            labels = labels[:self.config.training.snapshot_batch_size]
+
         images = self.sample_images(self.config.training.snapshot_batch_size, labels=labels).cpu()
         nrow = int(math.sqrt(self.config.training.snapshot_batch_size))
         grid = torchvision.utils.make_grid(images, nrow=nrow).permute(1, 2, 0)
@@ -283,6 +282,7 @@ class ControlNetRunner:
 
         self.switch_back_from_ema()
         self.model.train(prev_mode)
+        self.model.ddpm.eval()
 
     def inference(self, labels=None) -> None:
         self.model.eval()
@@ -291,4 +291,3 @@ class ControlNetRunner:
         images = self.sample_images(len(labels), labels=labels).cpu()
         self.switch_back_from_ema()
         return images
-
