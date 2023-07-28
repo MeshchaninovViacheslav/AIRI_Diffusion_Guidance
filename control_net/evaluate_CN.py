@@ -2,9 +2,7 @@ import torch
 import wandb
 
 import sys
-sys.path.append('../configs')
 sys.path.append('..')
-sys.path.append('../models')
 
 
 from configs.default_mnist_config import create_default_mnist_config
@@ -28,7 +26,7 @@ def accuracy(output, target):
 
 #wandb.init(project='sde', name='noisy_classifier')
 
-save_path = '../generations/mnist_classifier_guidance_set_100/'
+save_path = '../generations/mnist_control_net/'
 model_load_path = '../ddpm_checkpoints/clean_classifier.pth'
 
 device = torch.device('cuda')

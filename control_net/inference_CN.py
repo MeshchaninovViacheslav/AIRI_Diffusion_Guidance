@@ -13,13 +13,12 @@ import numpy as np
 
 
 import os
-#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
+from diffusion_control_net import ControlNetRunner
 
 config = create_default_mnist_config()
-diffusion = DiffusionRunner(config, eval=True)
+diffusion = ControlNetRunner(config, '../ddpm_checkpoints/ddpm_cont_reversed-50000.pth', eval=True)
 
-save_path = '../generations/mnist_classifier_guidance_set_100'
+save_path = '../generations/mnist_control_net'
 os.makedirs(save_path, exist_ok=True)
 
 batch_size = 1000

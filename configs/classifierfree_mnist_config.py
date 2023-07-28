@@ -50,7 +50,7 @@ def create_default_mnist_config():
     training.p_uncond = 0.1
     training.exp_name = 'ddpm_classifierfree'
 
-    training.checkpoints_folder = 'ddpm_checkpoints/'
+    training.checkpoints_folder = '../ddpm_checkpoints/'
 
     # sde
     sde = config.sde = ml_collections.ConfigDict()
@@ -60,11 +60,12 @@ def create_default_mnist_config():
 
     # 2 assignment - train noisy classifier
     classifier = config.classifier = ml_collections.ConfigDict()
+    classifier.type = 'free'
     classifier.training_iters = 20_000
     classifier.eval_freq = 5_000
     classifier.snapshot_freq = 5_000
     classifier.checkpoint_freq = 5_000
-    classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
+    classifier.checkpoint_path = '../ddpm_checkpoints/classifier.pth'
     
     config.checkpoints_prefix = 'ddpm_classifierfree'
     config.predict = 'noise'

@@ -1,6 +1,8 @@
 import torch
 from torchmetrics.image.fid import FrechetInceptionDistance
 from tqdm import tqdm
+import sys
+sys.append.path('..')
 
 @torch.no_grad()
 def accuracy(output, target):
@@ -21,7 +23,7 @@ metric = FrechetInceptionDistance(feature=768, normalize=True).to('cuda')
 if __name__ == "__main__":
     import os
     import cv2
-    from default_mnist_config import create_default_mnist_config
+    from configs.default_mnist_config import create_default_mnist_config
     from data_generator import DataGenerator
     import numpy as np
     
