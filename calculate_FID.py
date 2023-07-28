@@ -2,7 +2,7 @@ import torch
 from torchmetrics.image.fid import FrechetInceptionDistance
 from tqdm import tqdm
 import sys
-sys.append.path('..')
+sys.path.append('..')
 
 @torch.no_grad()
 def accuracy(output, target):
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     #real_images = real_images[:2000]
     print(real_images.shape)
     
-    fake_path = 'mnist_classifier_free_set'
+    fake_path = 'generations/mnist_control_net'
     fake_list = os.listdir(fake_path)
     
     fake_images = []
