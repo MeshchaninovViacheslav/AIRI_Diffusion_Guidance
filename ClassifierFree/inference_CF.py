@@ -1,4 +1,4 @@
-from classifierfree_mnist_config import create_default_mnist_config
+from ..configs.classifierfree_mnist_config import create_default_mnist_config
 from diffusion_cond import DiffusionRunnerConditional
 
 import torchvision.utils as tvu
@@ -6,19 +6,14 @@ import tqdm
 import torch
 import cv2
 import numpy as np
-import math
-import torchvision
-from torch.nn.parallel import DistributedDataParallel as DDP
-import torch.distributed as dist
 
 
 import os
-#os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 config = create_default_mnist_config()
 diffusion = DiffusionRunnerConditional(config, eval=True)
 
-save_path = 'mnist_classifier_free_set'
+save_path = '..generations/mnist_classifier_free_set'
 os.makedirs(save_path, exist_ok=True)
 
 batch_size = 1000

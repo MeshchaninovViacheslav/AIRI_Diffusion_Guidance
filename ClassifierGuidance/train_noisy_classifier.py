@@ -1,13 +1,13 @@
 import torch
 import wandb
 
-from default_mnist_config import create_default_mnist_config
-from models.classifier import ResNet, ResidualBlock
-from data_generator import DataGenerator
+from ..configs.default_mnist_config import create_default_mnist_config
+from ..models.classifier import ResNet, ResidualBlock
+from ..data_generator import DataGenerator
 from tqdm.auto import trange
 from tqdm import tqdm
 import os
-from ddpm_sde import DDPM_SDE
+from ..ddpm_sde import DDPM_SDE
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
@@ -121,4 +121,4 @@ for iter_idx in trange(1, 1 + TOTAL_ITERS):
         model.train()
 model.eval()
 
-torch.save(model.state_dict(), './ddpm_checkpoints/noisy_classifier.pth')
+torch.save(model.state_dict(), '../ddpm_checkpoints/noisy_classifier.pth')

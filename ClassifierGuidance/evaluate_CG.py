@@ -1,13 +1,10 @@
 import torch
 import wandb
 
-from default_mnist_config import create_default_mnist_config
-from models.classifier import ResNet, ResidualBlock
-from data_generator import CustomDataGenerator
-from tqdm.auto import trange
+from ..configs.default_mnist_config import create_default_mnist_config
+from ..models.classifier import ResNet, ResidualBlock
+from ..data_generator import CustomDataGenerator
 from tqdm import tqdm
-import os
-from ddpm_sde import DDPM_SDE
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
 
@@ -25,8 +22,8 @@ def accuracy(output, target):
 
 #wandb.init(project='sde', name='noisy_classifier')
 
-save_path = 'mnist_classifier_free_set/'
-model_load_path = 'ddpm_checkpoints/clean_classifier.pth'
+save_path = '..generations/mnist_classifier_guidance_set/'
+model_load_path = '..ddpm_checkpoints/clean_classifier.pth'
 
 device = torch.device('cuda')
 classifier_args = {

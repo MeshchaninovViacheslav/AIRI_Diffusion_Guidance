@@ -8,3 +8,4 @@ models/__pycache__/
 wandb/
 test.ipynb
 mnist_classifier_free_set/
+generations/
