@@ -9,7 +9,7 @@ def create_default_mnist_config():
     data.image_size = 32
     data.num_channels = 1
     data.centered = True
-    data.batch_size = 1024
+    data.batch_size = 64
     data.norm_mean = (0.5)
     data.norm_std = (0.5)
 
@@ -24,6 +24,8 @@ def create_default_mnist_config():
     model.resamp_with_conv = True
     model.conditional = True
     model.nonlinearity = 'swish'
+    model.num_classes = 10
+    model.class_embed_size = 3
 
     optim = config.optim = ml_collections.ConfigDict()
     optim.grad_clip_norm = 1.0
@@ -42,10 +44,11 @@ def create_default_mnist_config():
     training.eval_freq = 2500
     training.snapshot_freq = 1000
     training.snapshot_batch_size = 100
-    training.batch_size = 256
+    training.batch_size = 64
     training.ode_sampling = False
     training.logging_freq = 10
-    training.exp_name = 'ddpm_cont'
+    training.p_uncond = 0.1
+    training.exp_name = 'ddpm_classifierfree'
 
     training.checkpoints_folder = 'ddpm_checkpoints/'
 
@@ -57,13 +60,15 @@ def create_default_mnist_config():
 
     # 2 assignment - train noisy classifier
     classifier = config.classifier = ml_collections.ConfigDict()
+    classifier.type = 'uncond'
+    classifier.gamma = 8
     classifier.training_iters = 20_000
     classifier.eval_freq = 5_000
     classifier.snapshot_freq = 5_000
     classifier.checkpoint_freq = 5_000
     classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
     
-    config.checkpoints_prefix = 'ddpm_cont'
+    config.checkpoints_prefix = 'ddpm_classifierfree'
     config.predict = 'noise'
     config.device = 'cuda:0'
     return config

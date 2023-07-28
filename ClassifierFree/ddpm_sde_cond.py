@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-class DDPM_SDE:
+class DDPM_SDECond:
     def __init__(self, config):
         """Construct a Variance Preserving SDE.
 
@@ -63,7 +63,6 @@ class DDPM_SDE:
         T = self.T
         sde_fn = self.sde
         beta_fn = self._beta
-        predict = self.predict
         
         # Build the class for reverse-time SDE.
         class RSDE:
@@ -75,28 +74,28 @@ class DDPM_SDE:
             def T(self):
                 return T
 
-            def sde(self, x, t, labels=None):
+            def sde(self, x, t, cond):
                 if ode_sampling:
                     drift_sde, _ = sde_fn(x, t)
-                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t, labels)['score']
+                    drift = drift_sde - (1 / 2) * beta_fn(t)[:, None, None, None] * score_fn(x, t, cond)['score']
                     diffusion = 0
                 else:
                     drift_sde, diffuson_sde = sde_fn(x, t)
-                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t, labels)['score']
+                    drift = drift_sde - beta_fn(t)[:, None, None, None] * score_fn(x, t, cond)['score']
                     diffusion = diffuson_sde
                 return drift, diffusion
 
         return RSDE()
 
 
-class EulerDiffEqSolver:
+class EulerDiffEqSolverCond:
     def __init__(self, sde, score_fn, ode_sampling=False):
         self.sde = sde
         self.score_fn = score_fn
         self.ode_sampling = ode_sampling
         self.rsde = sde.reverse(score_fn, ode_sampling)
 
-    def step(self, x_t, t, labels=None):
+    def step(self, x_t, t, cond):
         """
         Implement reverse SDE/ODE Euler solver
         """
@@ -107,7 +106,7 @@ class EulerDiffEqSolver:
         """
         dt = -1 / self.rsde.N
         noise = torch.randn_like(x_t)
-        drift, diffusion = self.rsde.sde(x_t, t, labels)
+        drift, diffusion = self.rsde.sde(x_t, t, cond)
         x_mean = x_t + drift * dt
         #print(x_mean.shape, diffusion.shape, noize.shape)
         x = x_mean + diffusion.view(-1, 1, 1, 1) * np.sqrt(-dt) * noise
