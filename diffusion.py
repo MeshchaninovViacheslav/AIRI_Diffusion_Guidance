@@ -62,7 +62,8 @@ class DiffusionRunner:
         #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_newt-1.pth
         #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont-50000.pth
         #AIRI_Diffusion_Guidance/ddpm_checkpoints/ddpm_cont_reversed-50000.pth
-        model_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['model']
+        print(checkpoints_folder + self.config.chkp_name)
+        model_ckpt = torch.load(checkpoints_folder + self.config.chkp_name, map_location=device)['model']
         self.model.load_state_dict(model_ckpt)
 
         
@@ -80,7 +81,7 @@ class DiffusionRunner:
 
 
 
-        ema_ckpt = torch.load(checkpoints_folder + 'ddpm_cont_reversed-50000.pth', map_location=device)['ema']
+        ema_ckpt = torch.load(checkpoints_folder + self.config.chkp_name, map_location=device)['ema']
         self.ema.load_state_dict(ema_ckpt)
 
     def switch_to_ema(self) -> None:

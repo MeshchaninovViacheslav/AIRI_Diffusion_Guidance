@@ -41,18 +41,21 @@ if __name__ == "__main__":
     #real_images = real_images[:2000]
     print(real_images.shape)
     
-    fake_path = 'mnist_generated_samples'
+    fake_path = 'mnist_classifier_free_set'
     fake_list = os.listdir(fake_path)
     
     fake_images = []
     
-    for image in tqdm(fake_list):
+    for i, image in tqdm(enumerate(fake_list)):
         if '.png' not in image: continue
         img = cv2.imread(f'{fake_path}/{image}')
         img = img.transpose((2, 0, 1))
         img_tensor = torch.tensor(img)[None, ...] / 255.
         fake_images.append(img_tensor)
-        metric.update(img_tensor.to('cuda'), real=False)
+        if i % 100 == 0:
+
+            metric.update(torch.cat(fake_images).to('cuda'), real=False)
+            fake_images = []
     
     fake_images = torch.cat(fake_images)
     print(fake_images.shape)
