@@ -103,7 +103,6 @@ class ControlNet(nn.Module):
 
         modules.append(nn.Embedding(config.model.num_classes, 32))
         modules.append(nn.Sequential(
-            act,
             zero_conv(1, 1),
             act)
         )

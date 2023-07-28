@@ -24,10 +24,11 @@ def create_default_mnist_config():
     model.resamp_with_conv = True
     model.conditional = True
     model.nonlinearity = 'swish'
+    model.num_classes = 10
 
     optim = config.optim = ml_collections.ConfigDict()
     optim.grad_clip_norm = 1.0
-    optim.linear_warmup = 4000
+    optim.linear_warmup = 1000
     optim.lr = 2e-4
     optim.min_lr = 2e-4
     optim.warmup_lr = 0
@@ -37,13 +38,15 @@ def create_default_mnist_config():
 
     # training
     training = config.training = ml_collections.ConfigDict()
-    training.training_iters = 50_000
+    training.training_iters = 5000
     training.checkpoint_freq = 2_500
     training.eval_freq = 2_500
-    training.snapshot_freq = 2_500
-    training.snapshot_batch_size = 100
+    training.snapshot_freq = 10
+    training.snapshot_batch_size = 10
     training.batch_size = 256
     training.ode_sampling = False
+    training.exp_name = 'control_net'
+    training.logging_freq = 10
 
     training.checkpoints_folder = './ddpm_checkpoints/'
 
@@ -55,11 +58,11 @@ def create_default_mnist_config():
 
     # 2 assignment - train noisy classifier
     classifier = config.classifier = ml_collections.ConfigDict()
-    classifier.training_iters = 20_000
+    classifier.training_iters = 2000
     classifier.eval_freq = 5_000
-    classifier.snapshot_freq = 5_000
+    classifier.snapshot_freq = 200
     classifier.checkpoint_freq = 5_000
-    classifier.checkpoint_path = './ddpm_checkpoints/classifier.pth'
+    classifier.checkpoint_path = './ddpm_checkpoints/control.pth'
 
     config.device = 'cuda:0'
     return config
