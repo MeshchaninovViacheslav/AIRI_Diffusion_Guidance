@@ -1,5 +1,9 @@
-from ..configs.default_mnist_config import create_default_mnist_config
-from ..diffusion import DiffusionRunner
+import sys
+sys.path.append('../configs')
+sys.path.append('..')
+
+from configs.default_mnist_config import create_default_mnist_config
+from diffusion import DiffusionRunner
 import tqdm
 import torch
 import cv2
@@ -15,7 +19,7 @@ import os
 config = create_default_mnist_config()
 diffusion = DiffusionRunner(config, eval=True)
 
-save_path = '..generations/mnist_classifier_guidance_set'
+save_path = '../generations/mnist_classifier_guidance_set_100'
 os.makedirs(save_path, exist_ok=True)
 
 batch_size = 1000
